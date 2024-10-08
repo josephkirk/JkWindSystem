@@ -1,14 +1,15 @@
+#pragma once
 
+#include "CoreMinimal.h"
+#include "Kismet/BlueprintFunctionLibrary.h"
+#include "WindFunctionLibrary.generated.h"
 
-// UCLASS()
-// class UWindControlLibrary : public UBlueprintFunctionLibrary
-// {
-//     GENERATED_BODY()
+UCLASS()
+class JK_WINDSYSTEM_API UWindSimulationFunctionLibrary : public UBlueprintFunctionLibrary
+{
+    GENERATED_BODY()
 
-// public:
-//     UFUNCTION(BlueprintCallable, Category = "Wind Control")
-//     static void SetWindInRegion(AWindGridManager* GridManager, FVector Center, float Radius, FVector Direction, float Strength);
-
-//     UFUNCTION(BlueprintCallable, Category = "Wind Control")
-//     static void CreateWindVortex(AWindGridManager* GridManager, FVector Center, float Radius, float Strength);
-// };
+public:
+    UFUNCTION(BlueprintCallable, Category = "Wind Simulation", meta = (WorldContext = "WorldContextObject"))
+    static FVector GetWindVelocityAtLocation(const UObject* WorldContextObject, const FVector& WorldLocation);
+};

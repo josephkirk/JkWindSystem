@@ -1,6 +1,7 @@
 // WindSimulationComponent.cpp
 #include "WindSystemComponent.h"
 #include "DrawDebugHelpers.h"
+#include "WindSubsystem.h"
 
 UWindSimulationComponent::UWindSimulationComponent()
 {
@@ -12,6 +13,16 @@ void UWindSimulationComponent::BeginPlay()
 {
     Super::BeginPlay();
     InitializeGrid();
+
+    // Register with the subsystem
+    if (UWorld* World = GetWorld())
+    {
+        if (UWindSimulationSubsystem* WindSubsystem = World->GetSubsystem<UWindSimulationSubsystem>())
+        {
+            WindSubsystem->SetWindSimulationComponent(this);
+        }
+    }
+
 }
 
 void UWindSimulationComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
