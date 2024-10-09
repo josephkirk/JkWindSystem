@@ -1,4 +1,3 @@
-// PointWindGeneratorComponent.cpp
 #include "WindSourceComponent.h"
 #include "WindSubsystem.h"
 #include "WindSystemLog.h"
@@ -38,7 +37,6 @@ void UWindGeneratorComponent::UpdateWindSimulation(float DeltaTime, UWindSimulat
     TimeSinceLastUpdate += DeltaTime;
     if (TimeSinceLastUpdate >= UpdateFrequency)
     {
-        // Sample points within the wind generator's influence
         const int32 SampleCount = 10;
         for (int32 i = 0; i < SampleCount; ++i)
         {
@@ -46,7 +44,7 @@ void UWindGeneratorComponent::UpdateWindSimulation(float DeltaTime, UWindSimulat
             FVector SampleLocation = GetComponentLocation() + RandomOffset;
             FVector WindVelocity = GetWindVelocityAtLocation(SampleLocation);
 
-            // WINDSYSTEM_LOG(Log, TEXT("WindGeneratorComponent: Adding wind at location %s with velocity %s"), *SampleLocation.ToString(), *WindVelocity.ToString());
+            WINDSYSTEM_LOG(Verbose, TEXT("WindGeneratorComponent: Adding wind at location %s with velocity %s"), *SampleLocation.ToString(), *WindVelocity.ToString());
             Subsystem->AddWindAtLocation(SampleLocation, WindVelocity);
         }
         TimeSinceLastUpdate = 0.0f;
@@ -75,14 +73,15 @@ UWindSimulationSubsystem* UWindGeneratorComponent::GetWindSubsystem() const
 
 FVector UPointWindGeneratorComponent::GetWindVelocityAtLocation(const FVector& Location) const
 {
-    FVector Direction = Location - GetComponentLocation();
+    FVector Direction = GetComponentLocation() - Location;  // Changed to point towards center
     float Distance = Direction.Size();
-    
+
     if (Distance > Radius)
         return FVector::ZeroVector;
 
-    Direction.Normalize();
-    return Direction * Strength * GetFalloff(Distance);
+    Direction /= Distance;  // Normalize
+    float StrengthAtDistance = Strength * GetFalloff(Distance);
+    return Direction * StrengthAtDistance;
 }
 
 FVector UDirectionalWindGeneratorComponent::GetWindVelocityAtLocation(const FVector& Location) const
@@ -101,7 +100,8 @@ FVector UDirectionalWindGeneratorComponent::GetWindVelocityAtLocation(const FVec
             return FVector::ZeroVector;
     }
 
-    return Direction * Strength * GetFalloff(Distance);
+    float StrengthAtDistance = Strength * GetFalloff(Distance);
+    return Direction * StrengthAtDistance;
 }
 
 FVector UVortexWindGeneratorComponent::GetWindVelocityAtLocation(const FVector& Location) const
@@ -113,9 +113,12 @@ FVector UVortexWindGeneratorComponent::GetWindVelocityAtLocation(const FVector& 
         return FVector::ZeroVector;
 
     FVector Tangent = FVector::CrossProduct(GetUpVector(), ToLocation).GetSafeNormal();
-    FVector Outward = ToLocation.GetSafeNormal();
+    FVector Radial = ToLocation.GetSafeNormal();
 
-    return (Tangent * TangentialStrength + Outward * Strength) * GetFalloff(Distance);
+    float StrengthAtDistance = Strength * GetFalloff(Distance);
+    float TangentialStrengthAtDistance = TangentialStrength * GetFalloff(Distance);
+
+    return (Tangent * TangentialStrengthAtDistance + Radial * StrengthAtDistance);
 }
 
 USplineWindGeneratorComponent::USplineWindGeneratorComponent()
@@ -126,16 +129,14 @@ USplineWindGeneratorComponent::USplineWindGeneratorComponent()
 
 FVector USplineWindGeneratorComponent::GetWindVelocityAtLocation(const FVector& Location) const
 {
-    float ClosestDistance = TNumericLimits<float>::Max();
     float SplineInput = WindSpline->FindInputKeyClosestToWorldLocation(Location);
-
-    // Calculate the closest distance manually
     FVector ClosestPoint = WindSpline->GetLocationAtSplineInputKey(SplineInput, ESplineCoordinateSpace::World);
-    ClosestDistance = FVector::Distance(Location, ClosestPoint);
+    float ClosestDistance = FVector::Distance(Location, ClosestPoint);
 
     if (ClosestDistance > Radius)
         return FVector::ZeroVector;
 
-    FVector SplineTangent = WindSpline->GetTangentAtDistanceAlongSpline(SplineInput * WindSpline->GetSplineLength(), ESplineCoordinateSpace::World);
-    return SplineTangent.GetSafeNormal() * Strength * GetFalloff(ClosestDistance);
+    FVector SplineTangent = WindSpline->GetDirectionAtDistanceAlongSpline(SplineInput * WindSpline->GetSplineLength(), ESplineCoordinateSpace::World);
+    float StrengthAtDistance = Strength * GetFalloff(ClosestDistance);
+    return SplineTangent * StrengthAtDistance;
 }

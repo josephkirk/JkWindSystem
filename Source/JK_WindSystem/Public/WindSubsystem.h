@@ -14,26 +14,20 @@ class JK_WINDSYSTEM_API UWindSimulationSubsystem : public UWorldSubsystem
 public:
     UWindSimulationSubsystem();
 
-    // USubsystem implementation
     virtual void Initialize(FSubsystemCollectionBase& Collection) override;
     virtual void Deinitialize() override;
     virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
 
-    // Tick function
     virtual bool Tick(float DeltaTime);
 
-    // Wind query function
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
     FVector GetWindVelocityAtLocation(const FVector& WorldLocation) const;
 
-    // Function to add wind from generators
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
     void AddWindAtLocation(const FVector& Location, const FVector& WindVelocity);
 
-    // Register and unregister wind generators
     void RegisterWindGenerator(UWindGeneratorComponent* WindGenerator);
     void UnregisterWindGenerator(UWindGeneratorComponent* WindGenerator);
-
 
 private:
     UPROPERTY()
@@ -44,5 +38,5 @@ private:
     FTSTicker::FDelegateHandle TickHandle;
 
     void UpdateWindGenerators(float DeltaTime);
-
+    void EnsureWindSimComponentInitialized();
 };

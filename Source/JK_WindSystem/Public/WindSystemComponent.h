@@ -80,6 +80,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation|Testing")
     void InitializeForTesting();
 
+    UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
+    void StartSimulation();
+
 private:
     TSharedPtr<FWindGrid> WindGrid;
     float Viscosity;

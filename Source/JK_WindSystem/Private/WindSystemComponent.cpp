@@ -87,35 +87,52 @@ void UWindSimulationComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 
 void UWindSimulationComponent::InitializeGrid()
 {
+    if (WindGrid)
+    {
+        WINDSYSTEM_LOG(Warning, TEXT("WindGrid is already initialized. Skipping initialization."));
+        return;
+    }
+
     WindGrid = MakeShared<FWindGrid>(BaseGridSize, CellSize);
 
-    WINDSYSTEM_LOG(Log, TEXT("Wind Simulation Grid Initialized: %d cells"), BaseGridSize * BaseGridSize * BaseGridSize);
+    // Initialize with small, non-zero random values
+    for (int32 i = 0; i < BaseGridSize; ++i)
+    {
+        for (int32 j = 0; j < BaseGridSize; ++j)
+        {
+            for (int32 k = 0; k < BaseGridSize; ++k)
+            {
+                FVector RandomWind(
+                    FMath::RandRange(-0.1f, 0.1f),
+                    FMath::RandRange(-0.1f, 0.1f),
+                    FMath::RandRange(-0.1f, 0.1f)
+                );
+                WindGrid->SetCell(i, j, k, RandomWind);
+            }
+        }
+    }
+
+    WINDSYSTEM_LOG(Log, TEXT("Wind Simulation Grid Initialized: %d cells with small random initial wind"), BaseGridSize * BaseGridSize * BaseGridSize);
 }
 
 void UWindSimulationComponent::InitializeForTesting()
 {
-    if (!IsGridInitialized())
-    {
-        InitializeGrid();
-        // Add some initial random wind to the grid
-        for (int32 i = 0; i < BaseGridSize; ++i)
-        {
-            for (int32 j = 0; j < BaseGridSize; ++j)
-            {
-                for (int32 k = 0; k < BaseGridSize; ++k)
-                {
-                    FVector RandomWind(
-                        FMath::RandRange(-1.0f, 1.0f),
-                        FMath::RandRange(-1.0f, 1.0f),
-                        FMath::RandRange(-1.0f, 1.0f)
-                    );
-                    WindGrid->SetCell(i, j, k, RandomWind);
-                }
-            }
-        }
+    // Call the private InitializeGrid method
+    InitializeGrid();
 
-        WINDSYSTEM_LOG(Log, TEXT("Wind Simulation Grid Initialized: %d cells with random initial wind"), BaseGridSize * BaseGridSize * BaseGridSize);
-    }
+    // Perform any other initialization normally done in BeginPlay
+    StartSimulation();
+
+    // Add any additional initialization needed for testing
+    // For example, you might want to set up some initial wind conditions
+    WINDSYSTEM_LOG(Log, TEXT("Wind Simulation Component initialized for testing"));
+}
+
+void UWindSimulationComponent::StartSimulation()
+{
+    // Start any timers, register with subsystems, etc.
+    // This method should contain any setup normally done in BeginPlay
+    // that's necessary for the simulation to run correctly
 }
 
 void UWindSimulationComponent::SimulationStep(float DeltaTime)
