@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "WindSystemComponent.h"
+#include "WindSourceComponent.h"
 #include "WindSubsystem.generated.h"
 
 UCLASS()
@@ -33,4 +34,12 @@ private:
     UWindSimulationComponent* WindSimComponent;
 
     FTSTicker::FDelegateHandle TickHandle;
+
+private:
+    TArray<UWindGeneratorComponent*> WindGenerators;
+
+public:
+    void RegisterWindGenerator(UWindGeneratorComponent* WindGenerator);
+    void UnregisterWindGenerator(UWindGeneratorComponent* WindGenerator);
+
 };
