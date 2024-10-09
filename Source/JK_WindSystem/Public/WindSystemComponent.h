@@ -1,13 +1,37 @@
-// WindSystemComponent.h
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Components/SceneComponent.h"
 #include "HAL/Runnable.h"
 #include "HAL/ThreadSafeBool.h"
+#include "Containers/Array.h"
+#include "Templates/SharedPointer.h"
 #include "WindSystemComponent.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnWindCellUpdated, const FVector&, CellCenter, const FVector&, WindVelocity, float, CellSize);
+
+class FWindGrid
+{
+public:
+    FWindGrid(int32 Size, float CellSize);
+
+    FVector& GetCell(int32 X, int32 Y, int32 Z);
+    const FVector& GetCell(int32 X, int32 Y, int32 Z) const;
+    void SetCell(int32 X, int32 Y, int32 Z, const FVector& Value);
+
+    int32 GetSize() const { return GridSize; }
+    float GetCellSize() const { return CellSize; }
+
+    TArray<FVector>& GetGridData() { return Grid; }
+    const TArray<FVector>& GetGridData() const { return Grid; }
+
+private:
+    TArray<FVector> Grid;
+    int32 GridSize;
+    float CellSize;
+
+    int32 GetIndex(int32 X, int32 Y, int32 Z) const;
+};
 
 class FWindSimulationWorker : public FRunnable
 {
@@ -19,19 +43,6 @@ public:
 private:
     class UWindSimulationComponent* Owner;
     FThreadSafeBool bShouldRun;
-};
-
-USTRUCT()
-struct FAdaptiveGridCell
-{
-    GENERATED_BODY()
-
-    FVector Velocity;
-    TArray<FAdaptiveGridCell*> Children;
-    float SubdivisionThreshold;
-    float MergeThreshold;
-
-    FAdaptiveGridCell() : Velocity(FVector::ZeroVector), SubdivisionThreshold(1.0f), MergeThreshold(0.1f) {}
 };
 
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
@@ -58,24 +69,16 @@ public:
     UPROPERTY(BlueprintAssignable, Category = "Wind Simulation|Debug")
     FOnWindCellUpdated OnWindCellUpdated;
 
-    //UPROPERTY(EditAnywhere, Category = "Wind Simulation")
-    //float SimulationFrequency;
-
-    
-    // Expose these for the visualizer
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
-    int32 GetBaseGridSize() const { return BaseGridSize; }
+    int32 GetBaseGridSize() const { return WindGrid->GetSize(); }
 
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
-    float GetCellSize() const { return CellSize; }
+    float GetCellSize() const { return WindGrid->GetCellSize(); }
 
     void SimulationStep(float DeltaTime);
 
 private:
-
-    TArray<FAdaptiveGridCell> AdaptiveGrid;
-    int32 BaseGridSize;
-    float CellSize;
+    TSharedPtr<FWindGrid> WindGrid;
     float Viscosity;
     float SimulationFrequency;
 
@@ -83,14 +86,10 @@ private:
     FRunnableThread* SimulationThread;
     
     void InitializeGrid();
-    void UpdateAdaptiveGrid();
-    void Subdivide(FAdaptiveGridCell& Cell);
-    void Merge(FAdaptiveGridCell& ParentCell);
-    void Diffuse(TArray<FVector>& Dst, const TArray<FVector>& Src, float Diff, float Dt);
-    void Project(TArray<FVector>& VelocityX, TArray<FVector>& VelocityY, TArray<FVector>& VelocityZ, TArray<FVector>& P, TArray<FVector>& Div);
-    void SetBoundary(TArray<FVector>& Field);
-    int32 IX(int32 x, int32 y, int32 z) const;
-    void Advect(TArray<FVector>& Dst, const TArray<FVector>& Src, const TArray<FVector>& Velocity, float Dt);
-    void GetGridCell(const FVector& WorldLocation, int32& OutX, int32& OutY, int32& OutZ) const;
-    void ApplySIMDOperations(TArray<FVector>& Vectors, float Scalar);
+    void Diffuse(TSharedPtr<FWindGrid> Dst, const TSharedPtr<FWindGrid> Src, float Diff, float Dt);
+    void Project(TSharedPtr<FWindGrid> Velocity, TSharedPtr<FWindGrid> P, TSharedPtr<FWindGrid> Div);
+    void SetBoundary(TSharedPtr<FWindGrid> Field);
+    void Advect(TSharedPtr<FWindGrid> Dst, const TSharedPtr<FWindGrid> Src, const TSharedPtr<FWindGrid> Velocity, float Dt);
+    void ApplySIMDOperations(TSharedPtr<FWindGrid> Grid, float Scalar);
+    FVector InterpolateVelocity(const FVector& Position) const;
 };
