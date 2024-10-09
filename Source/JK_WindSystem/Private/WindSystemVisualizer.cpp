@@ -1,6 +1,7 @@
 // WindSystemVisualizer.cpp
 #include "WindSystemVisualizer.h"
 #include "WindSubsystem.h"
+#include "Kismet/GameplayStatics.h"
 
 UWindDebugVisualizer::UWindDebugVisualizer()
 {
@@ -66,17 +67,17 @@ void UWindDebugVisualizer::OnWindCellUpdated(const FVector& CellCenter, const FV
 
 void UWindDebugVisualizer::DrawDebugArrow(const UWorld* World, const FVector& Start, const FVector& End, const FVector& Velocity)
 {
-    FColor ArrowColorIntensity = ArrowColor.ReinterpretAsLinear() * (Velocity.Size() / 10.0f);
-    ArrowColorIntensity.A = 255;
+    FLinearColor ArrowColorIntensity = ArrowColor * (Velocity.Size() / 10.0f);
+    ArrowColorIntensity.A = 1.0f;
 
     DrawDebugDirectionalArrow(
         World,
         Start,
         End,
         20.0f, // Arrow Size
-        ArrowColorIntensity,
+        ArrowColorIntensity.ToFColor(true),
         false, // Persistent Lines
-        DebugDrawDuration,
+        -1.0f, // LifeTime
         0, // DepthPriority
         ArrowThickness
     );
@@ -90,8 +91,8 @@ void UWindDebugVisualizer::DrawDebugVelocityText(const UWorld* World, const FVec
         Location,
         VelocityText,
         nullptr, // Actor
-        ArrowColor,
-        DebugDrawDuration,
+        ArrowColor.ToFColor(true),
+        -1.0f, // Duration
         false, // bDrawShadow
         TextScale
     );
@@ -107,7 +108,7 @@ void UWindDebugVisualizer::DrawDebugAdaptiveGrid(const UWorld* World)
         return;
 
     FVector Origin = GetOwner()->GetActorLocation();
-    float GridSize = WindSimComponent->CellSize * WindSimComponent->BaseGridSize;
+    float GridSize = WindSimComponent->GetCellSize() * WindSimComponent->GetBaseGridSize();
 
     for (int32 z = 0; z < VisualizationResolution; ++z)
     {
@@ -122,7 +123,7 @@ void UWindDebugVisualizer::DrawDebugAdaptiveGrid(const UWorld* World)
                 );
 
                 FVector WindVelocity = WindSubsystem->GetWindVelocityAtLocation(CellCenter);
-                
+
                 if (WindVelocity.Size() >= MinVelocityThreshold)
                 {
                     if (bDrawArrows)
@@ -152,6 +153,9 @@ UWindSimulationSubsystem* UWindDebugVisualizer::GetWindSubsystem() const
     }
     return nullptr;
 }
+
+
+// WindDebugVisualizationActor
 
 AWindDebugVisualizationActor::AWindDebugVisualizationActor()
 {
