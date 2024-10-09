@@ -23,14 +23,44 @@ void UWindSimulationComponent::BeginPlay()
 
 void UWindSimulationComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    // Stop the simulation worker
     if (SimulationWorker)
     {
         SimulationWorker->Stop();
-        SimulationThread->WaitForCompletion();
+        
+        if (SimulationThread)
+        {
+            SimulationThread->WaitForCompletion();
+            delete SimulationThread;
+            SimulationThread = nullptr;
+        }
+        
         delete SimulationWorker;
-        delete SimulationThread;
+        SimulationWorker = nullptr;
     }
 
+    // Clear timers
+    if (UWorld* World = GetWorld())
+    {
+        World->GetTimerManager().ClearAllTimersForObject(this);
+    }
+
+    // Unregister from any subsystems
+    if (UWindSystemSubsystem* WindSystem = GetWorld()->GetSubsystem<UWindSystemSubsystem>())
+    {
+        WindSystem->UnregisterWindComponent(this);
+    }
+
+    // Unbind delegates
+    OnWindCellUpdated.Clear();
+
+    // Clear the grid data
+    AdaptiveGrid.Empty();
+
+    // Clear references to other objects
+    WindSimComponent = nullptr;
+
+    // Call the base class EndPlay
     Super::EndPlay(EndPlayReason);
 }
 
