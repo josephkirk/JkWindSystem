@@ -1,6 +1,7 @@
 // PointWindGeneratorComponent.cpp
 #include "WindSourceComponent.h"
 #include "WindSubsystem.h"
+#include "WindSystemLog.h"
 
 UWindGeneratorComponent::UWindGeneratorComponent()
 {
@@ -44,7 +45,8 @@ void UWindGeneratorComponent::UpdateWindSimulation(float DeltaTime, UWindSimulat
             FVector RandomOffset = FMath::VRand() * FMath::RandRange(0.0f, Radius);
             FVector SampleLocation = GetComponentLocation() + RandomOffset;
             FVector WindVelocity = GetWindVelocityAtLocation(SampleLocation);
-            
+
+            // WINDSYSTEM_LOG(Log, TEXT("WindGeneratorComponent: Adding wind at location %s with velocity %s"), *SampleLocation.ToString(), *WindVelocity.ToString());
             Subsystem->AddWindAtLocation(SampleLocation, WindVelocity);
         }
         TimeSinceLastUpdate = 0.0f;

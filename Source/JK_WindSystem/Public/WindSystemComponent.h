@@ -2,7 +2,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Components/ActorComponent.h"
+#include "Components/SceneComponent.h"
 #include "HAL/Runnable.h"
 #include "HAL/ThreadSafeBool.h"
 #include "WindSystemComponent.generated.h"
@@ -35,7 +35,7 @@ struct FAdaptiveGridCell
 };
 
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
-class JK_WINDSYSTEM_API UWindSimulationComponent : public UActorComponent
+class JK_WINDSYSTEM_API UWindSimulationComponent : public USceneComponent
 {
     GENERATED_BODY()
 
@@ -91,6 +91,6 @@ private:
     void SetBoundary(TArray<FVector>& Field);
     int32 IX(int32 x, int32 y, int32 z) const;
     void Advect(TArray<FVector>& Dst, const TArray<FVector>& Src, const TArray<FVector>& Velocity, float Dt);
-
+    void GetGridCell(const FVector& WorldLocation, int32& OutX, int32& OutY, int32& OutZ) const;
     void ApplySIMDOperations(TArray<FVector>& Vectors, float Scalar);
 };
