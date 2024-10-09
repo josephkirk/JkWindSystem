@@ -34,6 +34,8 @@ int32 FWindGrid::GetIndex(int32 X, int32 Y, int32 Z) const
 UWindSimulationComponent::UWindSimulationComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
+    BaseGridSize = 32; // Default value
+    CellSize = 100.0f; // Default value
     Viscosity = 0.1f;
     SimulationFrequency = 60.0f;
 }
@@ -67,6 +69,16 @@ void UWindSimulationComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
     Super::EndPlay(EndPlayReason);
 }
 
+int32 UWindSimulationComponent::GetBaseGridSize() const
+{
+    return BaseGridSize;
+}
+
+float UWindSimulationComponent::GetCellSize() const
+{
+    return CellSize;
+}
+
 void UWindSimulationComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
@@ -75,15 +87,45 @@ void UWindSimulationComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 
 void UWindSimulationComponent::InitializeGrid()
 {
-    const int32 BaseGridSize = 32;
-    const float CellSize = 100.0f;
     WindGrid = MakeShared<FWindGrid>(BaseGridSize, CellSize);
 
     WINDSYSTEM_LOG(Log, TEXT("Wind Simulation Grid Initialized: %d cells"), BaseGridSize * BaseGridSize * BaseGridSize);
 }
 
+void UWindSimulationComponent::InitializeForTesting()
+{
+    if (!IsGridInitialized())
+    {
+        InitializeGrid();
+        // Add some initial random wind to the grid
+        for (int32 i = 0; i < BaseGridSize; ++i)
+        {
+            for (int32 j = 0; j < BaseGridSize; ++j)
+            {
+                for (int32 k = 0; k < BaseGridSize; ++k)
+                {
+                    FVector RandomWind(
+                        FMath::RandRange(-1.0f, 1.0f),
+                        FMath::RandRange(-1.0f, 1.0f),
+                        FMath::RandRange(-1.0f, 1.0f)
+                    );
+                    WindGrid->SetCell(i, j, k, RandomWind);
+                }
+            }
+        }
+
+        WINDSYSTEM_LOG(Log, TEXT("Wind Simulation Grid Initialized: %d cells with random initial wind"), BaseGridSize * BaseGridSize * BaseGridSize);
+    }
+}
+
 void UWindSimulationComponent::SimulationStep(float DeltaTime)
 {
+    if (!IsGridInitialized())
+    {
+        WINDSYSTEM_LOG_WARNING(TEXT("WindGrid is not initialized"));
+        return;
+    }
+
     TSharedPtr<FWindGrid> TempGrid = MakeShared<FWindGrid>(WindGrid->GetSize(), WindGrid->GetCellSize());
 
     Diffuse(TempGrid, WindGrid, Viscosity, DeltaTime);
@@ -291,7 +333,7 @@ void UWindSimulationComponent::ApplySIMDOperations(TSharedPtr<FWindGrid> Grid, f
 
 FVector UWindSimulationComponent::GetWindVelocityAtLocation(const FVector& Location) const
 {
-    if (!WindGrid)
+    if (!IsGridInitialized())
     {
         WINDSYSTEM_LOG_ERROR(TEXT("WindGrid is not initialized"));
         return FVector::ZeroVector;
@@ -341,7 +383,7 @@ FVector UWindSimulationComponent::InterpolateVelocity(const FVector& Position) c
 
 void UWindSimulationComponent::AddWindAtLocation(const FVector& Location, const FVector& WindVelocity)
 {
-    if (!WindGrid)
+    if (!IsGridInitialized())
     {
         WINDSYSTEM_LOG_ERROR(TEXT("WindGrid is not initialized"));
         return;

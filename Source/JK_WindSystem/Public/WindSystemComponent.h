@@ -70,12 +70,15 @@ public:
     FOnWindCellUpdated OnWindCellUpdated;
 
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
-    int32 GetBaseGridSize() const { return WindGrid->GetSize(); }
+    int32 GetBaseGridSize() const;
 
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
-    float GetCellSize() const { return WindGrid->GetCellSize(); }
+    float GetCellSize() const;
 
     void SimulationStep(float DeltaTime);
+
+    UFUNCTION(BlueprintCallable, Category = "Wind Simulation|Testing")
+    void InitializeForTesting();
 
 private:
     TSharedPtr<FWindGrid> WindGrid;
@@ -85,7 +88,14 @@ private:
     FWindSimulationWorker* SimulationWorker;
     FRunnableThread* SimulationThread;
     
+    UPROPERTY()
+    int32 BaseGridSize;
+
+    UPROPERTY()
+    float CellSize;
+
     void InitializeGrid();
+    bool IsGridInitialized() const { return WindGrid != nullptr; }
     void Diffuse(TSharedPtr<FWindGrid> Dst, const TSharedPtr<FWindGrid> Src, float Diff, float Dt);
     void Project(TSharedPtr<FWindGrid> Velocity, TSharedPtr<FWindGrid> P, TSharedPtr<FWindGrid> Div);
     void SetBoundary(TSharedPtr<FWindGrid> Field);
