@@ -46,10 +46,10 @@ void UWindSimulationComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
     }
 
     // Unregister from any subsystems
-    if (UWindSystemSubsystem* WindSystem = GetWorld()->GetSubsystem<UWindSystemSubsystem>())
-    {
-        WindSystem->UnregisterWindComponent(this);
-    }
+    // if (UWindSystemSubsystem* WindSystem = GetWorld()->GetSubsystem<UWindSystemSubsystem>())
+    // {
+    //     WindSystem->UnregisterWindComponent(this);
+    // }
 
     // Unbind delegates
     OnWindCellUpdated.Clear();
@@ -58,7 +58,7 @@ void UWindSimulationComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
     AdaptiveGrid.Empty();
 
     // Clear references to other objects
-    WindSimComponent = nullptr;
+    // WindSimComponent = nullptr;
 
     // Call the base class EndPlay
     Super::EndPlay(EndPlayReason);
