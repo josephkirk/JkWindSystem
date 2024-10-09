@@ -1,14 +1,39 @@
-// WindSystemComponent.cpp
 #include "WindSystemComponent.h"
 #include "Async/ParallelFor.h"
 #include "Math/UnrealMathSSE.h"
 #include "WindSystemLog.h"
 
+FWindGrid::FWindGrid(int32 Size, float InCellSize) : GridSize(Size), CellSize(InCellSize)
+{
+    Grid.SetNum(Size * Size * Size);
+}
+
+FVector& FWindGrid::GetCell(int32 X, int32 Y, int32 Z)
+{
+    return Grid[GetIndex(X, Y, Z)];
+}
+
+const FVector& FWindGrid::GetCell(int32 X, int32 Y, int32 Z) const
+{
+    return Grid[GetIndex(X, Y, Z)];
+}
+
+void FWindGrid::SetCell(int32 X, int32 Y, int32 Z, const FVector& Value)
+{
+    Grid[GetIndex(X, Y, Z)] = Value;
+}
+
+int32 FWindGrid::GetIndex(int32 X, int32 Y, int32 Z) const
+{
+    X = FMath::Clamp(X, 0, GridSize - 1);
+    Y = FMath::Clamp(Y, 0, GridSize - 1);
+    Z = FMath::Clamp(Z, 0, GridSize - 1);
+    return X + Y * GridSize + Z * GridSize * GridSize;
+}
+
 UWindSimulationComponent::UWindSimulationComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
-    BaseGridSize = 32;
-    CellSize = 100.0f;
     Viscosity = 0.1f;
     SimulationFrequency = 60.0f;
 }
@@ -24,7 +49,6 @@ void UWindSimulationComponent::BeginPlay()
 
 void UWindSimulationComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-    // Stop the simulation worker
     if (SimulationWorker)
     {
         SimulationWorker->Stop();
@@ -40,28 +64,6 @@ void UWindSimulationComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
         SimulationWorker = nullptr;
     }
 
-    // Clear timers
-    if (UWorld* World = GetWorld())
-    {
-        World->GetTimerManager().ClearAllTimersForObject(this);
-    }
-
-    // Unregister from any subsystems
-    // if (UWindSystemSubsystem* WindSystem = GetWorld()->GetSubsystem<UWindSystemSubsystem>())
-    // {
-    //     WindSystem->UnregisterWindComponent(this);
-    // }
-
-    // Unbind delegates
-    OnWindCellUpdated.Clear();
-
-    // Clear the grid data
-    AdaptiveGrid.Empty();
-
-    // Clear references to other objects
-    // WindSimComponent = nullptr;
-
-    // Call the base class EndPlay
     Super::EndPlay(EndPlayReason);
 }
 
@@ -73,360 +75,298 @@ void UWindSimulationComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 
 void UWindSimulationComponent::InitializeGrid()
 {
-    int32 TotalCells = BaseGridSize * BaseGridSize * BaseGridSize;
-    AdaptiveGrid.SetNum(TotalCells);
+    const int32 BaseGridSize = 32;
+    const float CellSize = 100.0f;
+    WindGrid = MakeShared<FWindGrid>(BaseGridSize, CellSize);
 
-    for (int32 i = 0; i < TotalCells; ++i)
-    {
-        AdaptiveGrid[i].Velocity = FVector::ZeroVector;
-    }
-
-    WINDSYSTEM_LOG(Log, TEXT("Wind Simulation Grid Initialized: %d cells"), TotalCells);
+    WINDSYSTEM_LOG(Log, TEXT("Wind Simulation Grid Initialized: %d cells"), BaseGridSize * BaseGridSize * BaseGridSize);
 }
 
 void UWindSimulationComponent::SimulationStep(float DeltaTime)
 {
-    UpdateAdaptiveGrid();
+    TSharedPtr<FWindGrid> TempGrid = MakeShared<FWindGrid>(WindGrid->GetSize(), WindGrid->GetCellSize());
 
-    TArray<FVector> TempGrid;
-    TempGrid.SetNum(AdaptiveGrid.Num());
+    Diffuse(TempGrid, WindGrid, Viscosity, DeltaTime);
+    Project(TempGrid, MakeShared<FWindGrid>(WindGrid->GetSize(), WindGrid->GetCellSize()), MakeShared<FWindGrid>(WindGrid->GetSize(), WindGrid->GetCellSize()));
+    Advect(WindGrid, TempGrid, TempGrid, DeltaTime);
+    Project(WindGrid, MakeShared<FWindGrid>(WindGrid->GetSize(), WindGrid->GetCellSize()), MakeShared<FWindGrid>(WindGrid->GetSize(), WindGrid->GetCellSize()));
 
-    // Multi-threaded diffusion
-    ParallelFor(AdaptiveGrid.Num(), [&](int32 Index)
-        {
-            FAdaptiveGridCell& Cell = AdaptiveGrid[Index];
-            TArray<FVector> CellVelocity = { Cell.Velocity };
-            TArray<FVector> TempVelocity;
-            TempVelocity.SetNum(1);
-            Diffuse(TempVelocity, CellVelocity, Viscosity, DeltaTime);
-            TempGrid[Index] = TempVelocity[0];
-        });
-
-    // Apply SIMD operations
-    ApplySIMDOperations(TempGrid, DeltaTime);
-
-    // Multi-threaded advection
-    ParallelFor(AdaptiveGrid.Num(), [&](int32 Index)
-        {
-            FAdaptiveGridCell& Cell = AdaptiveGrid[Index];
-            TArray<FVector> CellVelocity = { Cell.Velocity };
-            TArray<FVector> TempVelocity = { TempGrid[Index] };
-            Advect(CellVelocity, TempVelocity, TempVelocity, DeltaTime);
-            Cell.Velocity = CellVelocity[0];
-        });
-
-    // Project step (not easily parallelizable due to its iterative nature)
-    TArray<FVector> ProjectX, ProjectY, ProjectZ, P, Div;
-    ProjectX.SetNum(AdaptiveGrid.Num());
-    ProjectY.SetNum(AdaptiveGrid.Num());
-    ProjectZ.SetNum(AdaptiveGrid.Num());
-    P.SetNum(AdaptiveGrid.Num());
-    Div.SetNum(AdaptiveGrid.Num());
-
-    for (int32 i = 0; i < AdaptiveGrid.Num(); ++i)
-    {
-        ProjectX[i] = FVector(AdaptiveGrid[i].Velocity.X, 0, 0);
-        ProjectY[i] = FVector(0, AdaptiveGrid[i].Velocity.Y, 0);
-        ProjectZ[i] = FVector(0, 0, AdaptiveGrid[i].Velocity.Z);
-    }
-
-    Project(ProjectX, ProjectY, ProjectZ, P, Div);
-
-    for (int32 i = 0; i < AdaptiveGrid.Num(); ++i)
-    {
-        AdaptiveGrid[i].Velocity = FVector(ProjectX[i].X, ProjectY[i].Y, ProjectZ[i].Z);
-    }
+    ApplySIMDOperations(WindGrid, DeltaTime);
 }
 
-void UWindSimulationComponent::UpdateAdaptiveGrid()
+void UWindSimulationComponent::Diffuse(TSharedPtr<FWindGrid> Dst, const TSharedPtr<FWindGrid> Src, float Diff, float Dt)
 {
-    for (FAdaptiveGridCell& Cell : AdaptiveGrid)
-    {
-        if (Cell.Velocity.Size() > Cell.SubdivisionThreshold)
+    float a = Dt * Diff * (Src->GetSize() - 2) * (Src->GetSize() - 2);
+    int32 Size = Src->GetSize();
+
+    ParallelFor(Size, [&](int32 K)
         {
-            Subdivide(Cell);
-        }
-        else if (Cell.Velocity.Size() < Cell.MergeThreshold && Cell.Children.Num() > 0)
-        {
-            Merge(Cell);
-        }
-    }
-}
-
-void UWindSimulationComponent::Subdivide(FAdaptiveGridCell& Cell)
-{
-    if (Cell.Children.Num() == 0)
-    {
-        for (int32 i = 0; i < 8; ++i)
-        {
-            Cell.Children.Add(new FAdaptiveGridCell());
-        }
-    }
-}
-
-void UWindSimulationComponent::Merge(FAdaptiveGridCell& ParentCell)
-{
-    // Average child velocities
-    FVector AverageVelocity = FVector::ZeroVector;
-    for (const FAdaptiveGridCell* Child : ParentCell.Children)
-    {
-        AverageVelocity += Child->Velocity;
-    }
-    ParentCell.Velocity = AverageVelocity / ParentCell.Children.Num();
-
-    // Clear children
-    for (FAdaptiveGridCell* Child : ParentCell.Children)
-    {
-        delete Child;
-    }
-    ParentCell.Children.Empty();
-}
-
-void UWindSimulationComponent::Diffuse(TArray<FVector>& Dst, const TArray<FVector>& Src, float Diff, float Dt)
-{
-    // Simplified diffusion for demonstration
-    for (int32 i = 0; i < Src.Num(); ++i)
-    {
-        Dst[i] = Src[i] + Diff * Dt * (Src[i] - Src[i]);
-    }
-}
-
-void UWindSimulationComponent::Project(TArray<FVector>& VelocityX, TArray<FVector>& VelocityY, TArray<FVector>& VelocityZ, TArray<FVector>& P, TArray<FVector>& Div)
-{
-    float h = CellSize;
-    float h2 = h * h;
-
-    // Calculate divergence
-    for (int32 k = 1; k < BaseGridSize - 1; k++)
-    {
-        for (int32 j = 1; j < BaseGridSize - 1; j++)
-        {
-            for (int32 i = 1; i < BaseGridSize - 1; i++)
+            for (int32 J = 1; J < Size - 1; J++)
             {
-                int32 Index = IX(i, j, k);
-                Div[Index].X = -0.5f * h * (
-                    VelocityX[IX(i + 1, j, k)].X - VelocityX[IX(i - 1, j, k)].X +
-                    VelocityY[IX(i, j + 1, k)].Y - VelocityY[IX(i, j - 1, k)].Y +
-                    VelocityZ[IX(i, j, k + 1)].Z - VelocityZ[IX(i, j, k - 1)].Z
-                    );
-                P[Index] = FVector::ZeroVector;
+                for (int32 I = 1; I < Size - 1; I++)
+                {
+                    FVector NewValue = (Src->GetCell(I, J, K) +
+                        a * (Src->GetCell(I - 1, J, K) + Src->GetCell(I + 1, J, K) +
+                            Src->GetCell(I, J - 1, K) + Src->GetCell(I, J + 1, K) +
+                            Src->GetCell(I, J, K - 1) + Src->GetCell(I, J, K + 1))) / (1 + 6 * a);
+                    Dst->SetCell(I, J, K, NewValue);
+                }
             }
-        }
-    }
+        });
+
+    SetBoundary(Dst);
+}
+
+void UWindSimulationComponent::Project(TSharedPtr<FWindGrid> Velocity, TSharedPtr<FWindGrid> P, TSharedPtr<FWindGrid> Div)
+{
+    int32 Size = Velocity->GetSize();
+    double H = 1.0 / (Size - 2);
+
+    ParallelFor(Size, [&](int32 K)
+        {
+            for (int32 J = 1; J < Size - 1; J++)
+            {
+                for (int32 I = 1; I < Size - 1; I++)
+                {
+                    double DivValue = -0.5 * H * (
+                        Velocity->GetCell(I + 1, J, K).X - Velocity->GetCell(I - 1, J, K).X +
+                        Velocity->GetCell(I, J + 1, K).Y - Velocity->GetCell(I, J - 1, K).Y +
+                        Velocity->GetCell(I, J, K + 1).Z - Velocity->GetCell(I, J, K - 1).Z
+                        );
+                    Div->SetCell(I, J, K, FVector(DivValue));
+                    P->SetCell(I, J, K, FVector::ZeroVector);
+                }
+            }
+        });
 
     SetBoundary(Div);
     SetBoundary(P);
 
-    // Solve Poisson equation
-    for (int32 Iteration = 0; Iteration < 20; Iteration++)
+    for (int32 K = 0; K < 20; K++)
     {
-        for (int32 k = 1; k < BaseGridSize - 1; k++)
-        {
-            for (int32 j = 1; j < BaseGridSize - 1; j++)
+        ParallelFor(Size, [&](int32 K)
             {
-                for (int32 i = 1; i < BaseGridSize - 1; i++)
+                for (int32 J = 1; J < Size - 1; J++)
                 {
-                    int32 Index = IX(i, j, k);
-                    P[Index].X = (Div[Index].X +
-                        P[IX(i - 1, j, k)].X + P[IX(i + 1, j, k)].X +
-                        P[IX(i, j - 1, k)].X + P[IX(i, j + 1, k)].X +
-                        P[IX(i, j, k - 1)].X + P[IX(i, j, k + 1)].X) / 6.0f;
+                    for (int32 I = 1; I < Size - 1; I++)
+                    {
+                        double PValue = (Div->GetCell(I, J, K).X +
+                            P->GetCell(I - 1, J, K).X + P->GetCell(I + 1, J, K).X +
+                            P->GetCell(I, J - 1, K).X + P->GetCell(I, J + 1, K).X +
+                            P->GetCell(I, J, K - 1).X + P->GetCell(I, J, K + 1).X) / 6.0;
+                        P->SetCell(I, J, K, FVector(PValue));
+                    }
                 }
-            }
-        }
+            });
         SetBoundary(P);
     }
 
-    // Subtract pressure gradient
-    for (int32 k = 1; k < BaseGridSize - 1; k++)
-    {
-        for (int32 j = 1; j < BaseGridSize - 1; j++)
+    ParallelFor(Size, [&](int32 K)
         {
-            for (int32 i = 1; i < BaseGridSize - 1; i++)
+            for (int32 J = 1; J < Size - 1; J++)
             {
-                int32 Index = IX(i, j, k);
-                VelocityX[Index].X -= 0.5f * (P[IX(i + 1, j, k)].X - P[IX(i - 1, j, k)].X) / h;
-                VelocityY[Index].Y -= 0.5f * (P[IX(i, j + 1, k)].X - P[IX(i, j - 1, k)].X) / h;
-                VelocityZ[Index].Z -= 0.5f * (P[IX(i, j, k + 1)].X - P[IX(i, j, k - 1)].X) / h;
+                for (int32 I = 1; I < Size - 1; I++)
+                {
+                    FVector Vel = Velocity->GetCell(I, J, K);
+                    Vel.X -= 0.5 * (P->GetCell(I + 1, J, K).X - P->GetCell(I - 1, J, K).X) / H;
+                    Vel.Y -= 0.5 * (P->GetCell(I, J + 1, K).X - P->GetCell(I, J - 1, K).X) / H;
+                    Vel.Z -= 0.5 * (P->GetCell(I, J, K + 1).X - P->GetCell(I, J, K - 1).X) / H;
+                    Velocity->SetCell(I, J, K, Vel);
+                }
             }
-        }
-    }
+        });
 
-    SetBoundary(VelocityX);
-    SetBoundary(VelocityY);
-    SetBoundary(VelocityZ);
+    SetBoundary(Velocity);
 }
 
-// Helper function to handle boundaries
-void UWindSimulationComponent::SetBoundary(TArray<FVector>& Field)
+void UWindSimulationComponent::SetBoundary(TSharedPtr<FWindGrid> Field)
 {
-    for (int32 j = 1; j < BaseGridSize - 1; j++)
-    {
-        for (int32 i = 1; i < BaseGridSize - 1; i++)
-        {
-            // Set z-facing boundaries
-            Field[IX(i, j, 0)] = Field[IX(i, j, 1)];
-            Field[IX(i, j, BaseGridSize - 1)] = Field[IX(i, j, BaseGridSize - 2)];
-        }
-    }
+    int32 Size = Field->GetSize();
 
-    for (int32 k = 1; k < BaseGridSize - 1; k++)
+    ParallelFor(Size, [&](int32 I)
     {
-        for (int32 i = 1; i < BaseGridSize - 1; i++)
+        for (int32 J = 1; J < Size - 1; J++)
         {
-            // Set y-facing boundaries
-            Field[IX(i, 0, k)] = Field[IX(i, 1, k)];
-            Field[IX(i, BaseGridSize - 1, k)] = Field[IX(i, BaseGridSize - 2, k)];
+            Field->SetCell(I, J, 0, Field->GetCell(I, J, 1));
+            Field->SetCell(I, J, Size - 1, Field->GetCell(I, J, Size - 2));
         }
-    }
+    });
 
-    for (int32 k = 1; k < BaseGridSize - 1; k++)
+    ParallelFor(Size, [&](int32 K)
     {
-        for (int32 j = 1; j < BaseGridSize - 1; j++)
+        for (int32 I = 1; I < Size - 1; I++)
         {
-            // Set x-facing boundaries
-            Field[IX(0, j, k)] = Field[IX(1, j, k)];
-            Field[IX(BaseGridSize - 1, j, k)] = Field[IX(BaseGridSize - 2, j, k)];
+            Field->SetCell(I, 0, K, Field->GetCell(I, 1, K));
+            Field->SetCell(I, Size - 1, K, Field->GetCell(I, Size - 2, K));
         }
-    }
+    });
+
+    ParallelFor(Size, [&](int32 J)
+    {
+        for (int32 K = 1; K < Size - 1; K++)
+        {
+            Field->SetCell(0, J, K, Field->GetCell(1, J, K));
+            Field->SetCell(Size - 1, J, K, Field->GetCell(Size - 2, J, K));
+        }
+    });
 
     // Set corner values
-    Field[IX(0, 0, 0)] = (Field[IX(1, 0, 0)] + Field[IX(0, 1, 0)] + Field[IX(0, 0, 1)]) / 3.0f;
-    Field[IX(0, BaseGridSize - 1, 0)] = (Field[IX(1, BaseGridSize - 1, 0)] + Field[IX(0, BaseGridSize - 2, 0)] + Field[IX(0, BaseGridSize - 1, 1)]) / 3.0f;
-    Field[IX(0, 0, BaseGridSize - 1)] = (Field[IX(1, 0, BaseGridSize - 1)] + Field[IX(0, 1, BaseGridSize - 1)] + Field[IX(0, 0, BaseGridSize - 2)]) / 3.0f;
-    Field[IX(0, BaseGridSize - 1, BaseGridSize - 1)] = (Field[IX(1, BaseGridSize - 1, BaseGridSize - 1)] + Field[IX(0, BaseGridSize - 2, BaseGridSize - 1)] + Field[IX(0, BaseGridSize - 1, BaseGridSize - 2)]) / 3.0f;
-    Field[IX(BaseGridSize - 1, 0, 0)] = (Field[IX(BaseGridSize - 2, 0, 0)] + Field[IX(BaseGridSize - 1, 1, 0)] + Field[IX(BaseGridSize - 1, 0, 1)]) / 3.0f;
-    Field[IX(BaseGridSize - 1, BaseGridSize - 1, 0)] = (Field[IX(BaseGridSize - 2, BaseGridSize - 1, 0)] + Field[IX(BaseGridSize - 1, BaseGridSize - 2, 0)] + Field[IX(BaseGridSize - 1, BaseGridSize - 1, 1)]) / 3.0f;
-    Field[IX(BaseGridSize - 1, 0, BaseGridSize - 1)] = (Field[IX(BaseGridSize - 2, 0, BaseGridSize - 1)] + Field[IX(BaseGridSize - 1, 1, BaseGridSize - 1)] + Field[IX(BaseGridSize - 1, 0, BaseGridSize - 2)]) / 3.0f;
-    Field[IX(BaseGridSize - 1, BaseGridSize - 1, BaseGridSize - 1)] = (Field[IX(BaseGridSize - 2, BaseGridSize - 1, BaseGridSize - 1)] + Field[IX(BaseGridSize - 1, BaseGridSize - 2, BaseGridSize - 1)] + Field[IX(BaseGridSize - 1, BaseGridSize - 1, BaseGridSize - 2)]) / 3.0f;
+    Field->SetCell(0, 0, 0, (Field->GetCell(1, 0, 0) + Field->GetCell(0, 1, 0) + Field->GetCell(0, 0, 1)) / 3.0f);
+    Field->SetCell(0, Size - 1, 0, (Field->GetCell(1, Size - 1, 0) + Field->GetCell(0, Size - 2, 0) + Field->GetCell(0, Size - 1, 1)) / 3.0f);
+    Field->SetCell(0, 0, Size - 1, (Field->GetCell(1, 0, Size - 1) + Field->GetCell(0, 1, Size - 1) + Field->GetCell(0, 0, Size - 2)) / 3.0f);
+    Field->SetCell(0, Size - 1, Size - 1, (Field->GetCell(1, Size - 1, Size - 1) + Field->GetCell(0, Size - 2, Size - 1) + Field->GetCell(0, Size - 1, Size - 2)) / 3.0f);
+    Field->SetCell(Size - 1, 0, 0, (Field->GetCell(Size - 2, 0, 0) + Field->GetCell(Size - 1, 1, 0) + Field->GetCell(Size - 1, 0, 1)) / 3.0f);
+    Field->SetCell(Size - 1, Size - 1, 0, (Field->GetCell(Size - 2, Size - 1, 0) + Field->GetCell(Size - 1, Size - 2, 0) + Field->GetCell(Size - 1, Size - 1, 1)) / 3.0f);
+    Field->SetCell(Size - 1, 0, Size - 1, (Field->GetCell(Size - 2, 0, Size - 1) + Field->GetCell(Size - 1, 1, Size - 1) + Field->GetCell(Size - 1, 0, Size - 2)) / 3.0f);
+    Field->SetCell(Size - 1, Size - 1, Size - 1, (Field->GetCell(Size - 2, Size - 1, Size - 1) + Field->GetCell(Size - 1, Size - 2, Size - 1) + Field->GetCell(Size - 1, Size - 1, Size - 2)) / 3.0f);
 }
 
-// Helper function to calculate 3D array index
-int32 UWindSimulationComponent::IX(int32 x, int32 y, int32 z) const
+void UWindSimulationComponent::Advect(TSharedPtr<FWindGrid> Dst, const TSharedPtr<FWindGrid> Src, const TSharedPtr<FWindGrid> Velocity, float Dt)
 {
-    return x + y * BaseGridSize + z * BaseGridSize * BaseGridSize;
-}
+    int32 Size = Src->GetSize();
+    float Dt0 = Dt * (Size - 2);
 
-void UWindSimulationComponent::Advect(TArray<FVector>& Dst, const TArray<FVector>& Src, const TArray<FVector>& Velocity, float Dt)
-{
-    // Simplified advection for demonstration
-    for (int32 i = 0; i < Src.Num(); ++i)
+    ParallelFor(Size, [&](int32 K)
     {
-        Dst[i] = Src[i] + Velocity[i] * Dt;
-    }
+        for (int32 J = 1; J < Size - 1; J++)
+        {
+            for (int32 I = 1; I < Size - 1; I++)
+            {
+                FVector Pos = FVector(I, J, K) - Dt0 * Velocity->GetCell(I, J, K);
+                
+                Pos.X = FMath::Clamp(Pos.X, 0.5f, Size - 1.5f);
+                int32 I0 = FMath::FloorToInt(Pos.X);
+                int32 I1 = I0 + 1;
+                
+                Pos.Y = FMath::Clamp(Pos.Y, 0.5f, Size - 1.5f);
+                int32 J0 = FMath::FloorToInt(Pos.Y);
+                int32 J1 = J0 + 1;
+                
+                Pos.Z = FMath::Clamp(Pos.Z, 0.5f, Size - 1.5f);
+                int32 K0 = FMath::FloorToInt(Pos.Z);
+                int32 K1 = K0 + 1;
+
+                float S1 = Pos.X - I0;
+                float S0 = 1 - S1;
+                float T1 = Pos.Y - J0;
+                float T0 = 1 - T1;
+                float U1 = Pos.Z - K0;
+                float U0 = 1 - U1;
+
+                Dst->SetCell(I, J, K,
+                    S0 * (T0 * (U0 * Src->GetCell(I0, J0, K0) + U1 * Src->GetCell(I0, J0, K1)) +
+                          T1 * (U0 * Src->GetCell(I0, J1, K0) + U1 * Src->GetCell(I0, J1, K1))) +
+                    S1 * (T0 * (U0 * Src->GetCell(I1, J0, K0) + U1 * Src->GetCell(I1, J0, K1)) +
+                          T1 * (U0 * Src->GetCell(I1, J1, K0) + U1 * Src->GetCell(I1, J1, K1)))
+                );
+            }
+        }
+    });
+
+    SetBoundary(Dst);
 }
 
-void UWindSimulationComponent::ApplySIMDOperations(TArray<FVector>& Vectors, float Scalar)
+void UWindSimulationComponent::ApplySIMDOperations(TSharedPtr<FWindGrid> Grid, float Scalar)
 {
-    const int32 VectorCount = Vectors.Num();
-    const int32 NumChunks = VectorCount / 4;
+    int32 Size = Grid->GetSize();
+    int32 TotalCells = Size * Size * Size;
+    int32 VectorCount = TotalCells / 4;
 
-    for (int32 ChunkIndex = 0; ChunkIndex < NumChunks; ChunkIndex++)
+    TArray<FVector>& GridData = Grid->GetGridData();
+
+    // Use SIMD operations for blocks of 4 vectors
+    for (int32 i = 0; i < VectorCount; i++)
     {
-        float* Data = reinterpret_cast<float*>(&Vectors[ChunkIndex * 4]);
-        VectorRegister4Float VecChunk = VectorLoadAligned(Data);
-        VectorRegister4Float ScalarReg = VectorSetFloat1(Scalar);
-        VectorRegister4Float Result = VectorMultiply(VecChunk, ScalarReg);
-        VectorStoreAligned(Result, Data);
+        VectorRegister4Float* VectorPtr = reinterpret_cast<VectorRegister4Float*>(&GridData[i * 4]);
+        VectorRegister4Float ScalarVec = VectorSetFloat1(Scalar);
+        *VectorPtr = VectorMultiply(*VectorPtr, ScalarVec);
     }
 
     // Handle remaining elements
-    for (int32 i = NumChunks * 4; i < VectorCount; ++i)
+    for (int32 i = VectorCount * 4; i < TotalCells; i++)
     {
-        Vectors[i] *= Scalar;
+        GridData[i] *= Scalar;
     }
 }
 
-FVector UWindSimulationComponent::GetWindVelocityAtLocation(const FVector& WorldLocation) const
+FVector UWindSimulationComponent::GetWindVelocityAtLocation(const FVector& Location) const
 {
-    int32 X, Y, Z;
-    GetGridCell(WorldLocation, X, Y, Z);
-
-    // Ensure we're within the grid bounds
-    if (X < 0 || X >= BaseGridSize || Y < 0 || Y >= BaseGridSize || Z < 0 || Z >= BaseGridSize)
+    if (!WindGrid)
     {
-        WINDSYSTEM_LOG_WARNING(TEXT("GetWindVelocityAtLocation: Location out of grid bounds: %s"), *WorldLocation.ToString());
+        WINDSYSTEM_LOG_ERROR(TEXT("WindGrid is not initialized"));
         return FVector::ZeroVector;
     }
 
-    int32 Index = IX(X, Y, Z);
-    if (Index < 0 || Index >= AdaptiveGrid.Num())
-    {
-        WINDSYSTEM_LOG_ERROR(TEXT("GetWindVelocityAtLocation: Invalid grid index %d for location %s"), Index, *WorldLocation.ToString());
-        return FVector::ZeroVector;
-    }
+    FVector LocalPos = GetComponentTransform().InverseTransformPosition(Location);
+    FVector GridPos = LocalPos / WindGrid->GetCellSize();
 
-    // Simple trilinear interpolation for smoother results
-    FVector LocalPos = GetComponentTransform().InverseTransformPosition(WorldLocation);
-    FVector CellPos(
-        (LocalPos.X / CellSize) - X,
-        (LocalPos.Y / CellSize) - Y,
-        (LocalPos.Z / CellSize) - Z
+    return InterpolateVelocity(GridPos);
+}
+
+FVector UWindSimulationComponent::InterpolateVelocity(const FVector& Position) const
+{
+    int32 Size = WindGrid->GetSize();
+    int32 X0 = FMath::FloorToInt(Position.X);
+    int32 Y0 = FMath::FloorToInt(Position.Y);
+    int32 Z0 = FMath::FloorToInt(Position.Z);
+    int32 X1 = FMath::Min(X0 + 1, Size - 1);
+    int32 Y1 = FMath::Min(Y0 + 1, Size - 1);
+    int32 Z1 = FMath::Min(Z0 + 1, Size - 1);
+
+    float Sx = Position.X - X0;
+    float Sy = Position.Y - Y0;
+    float Sz = Position.Z - Z0;
+
+    FVector C000 = WindGrid->GetCell(X0, Y0, Z0);
+    FVector C100 = WindGrid->GetCell(X1, Y0, Z0);
+    FVector C010 = WindGrid->GetCell(X0, Y1, Z0);
+    FVector C110 = WindGrid->GetCell(X1, Y1, Z0);
+    FVector C001 = WindGrid->GetCell(X0, Y0, Z1);
+    FVector C101 = WindGrid->GetCell(X1, Y0, Z1);
+    FVector C011 = WindGrid->GetCell(X0, Y1, Z1);
+    FVector C111 = WindGrid->GetCell(X1, Y1, Z1);
+
+    return FMath::Lerp(
+        FMath::Lerp(
+            FMath::Lerp(C000, C100, Sx),
+            FMath::Lerp(C010, C110, Sx),
+            Sy),
+        FMath::Lerp(
+            FMath::Lerp(C001, C101, Sx),
+            FMath::Lerp(C011, C111, Sx),
+            Sy),
+        Sz
     );
-
-    FVector InterpolatedVelocity = FVector::ZeroVector;
-    for (int32 dz = 0; dz <= 1; ++dz)
-    {
-        for (int32 dy = 0; dy <= 1; ++dy)
-        {
-            for (int32 dx = 0; dx <= 1; ++dx)
-            {
-                int32 NX = FMath::Clamp(X + dx, 0, BaseGridSize - 1);
-                int32 NY = FMath::Clamp(Y + dy, 0, BaseGridSize - 1);
-                int32 NZ = FMath::Clamp(Z + dz, 0, BaseGridSize - 1);
-
-                int32 NeighborIndex = IX(NX, NY, NZ);
-                if (NeighborIndex >= 0 && NeighborIndex < AdaptiveGrid.Num())
-                {
-                    float Weight = (dx == 0 ? 1 - CellPos.X : CellPos.X) *
-                        (dy == 0 ? 1 - CellPos.Y : CellPos.Y) *
-                        (dz == 0 ? 1 - CellPos.Z : CellPos.Z);
-
-                    InterpolatedVelocity += AdaptiveGrid[NeighborIndex].Velocity * Weight;
-                }
-            }
-        }
-    }
-
-    return InterpolatedVelocity;
 }
 
 void UWindSimulationComponent::AddWindAtLocation(const FVector& Location, const FVector& WindVelocity)
 {
-    int32 X, Y, Z;
-    GetGridCell(Location, X, Y, Z);
-
-    // Add the wind velocity to the current cell
-    int32 Index = IX(X, Y, Z);
-    if (Index >= 0 && Index < AdaptiveGrid.Num())
+    if (!WindGrid)
     {
-        AdaptiveGrid[Index].Velocity += WindVelocity;
+        WINDSYSTEM_LOG_ERROR(TEXT("WindGrid is not initialized"));
+        return;
+    }
 
-        // Optionally, distribute some of the wind to neighboring cells for smoother effect
-        float DistributionFactor = 0.1f;
-        for (int32 dz = -1; dz <= 1; dz++)
-        {
-            for (int32 dy = -1; dy <= 1; dy++)
-            {
-                for (int32 dx = -1; dx <= 1; dx++)
-                {
-                    if (dx == 0 && dy == 0 && dz == 0) continue;
+    FVector LocalPos = GetComponentTransform().InverseTransformPosition(Location);
+    FVector GridPos = LocalPos / WindGrid->GetCellSize();
 
-                    int32 NX = FMath::Clamp(X + dx, 0, BaseGridSize - 1);
-                    int32 NY = FMath::Clamp(Y + dy, 0, BaseGridSize - 1);
-                    int32 NZ = FMath::Clamp(Z + dz, 0, BaseGridSize - 1);
+    int32 X = FMath::FloorToInt(GridPos.X);
+    int32 Y = FMath::FloorToInt(GridPos.Y);
+    int32 Z = FMath::FloorToInt(GridPos.Z);
 
-                    int32 NeighborIndex = IX(NX, NY, NZ);
-                    if (NeighborIndex >= 0 && NeighborIndex < AdaptiveGrid.Num())
-                    {
-                        AdaptiveGrid[NeighborIndex].Velocity += WindVelocity * DistributionFactor;
-                    }
-                }
-            }
-        }
+    int32 Size = WindGrid->GetSize();
+    if (X >= 0 && X < Size && Y >= 0 && Y < Size && Z >= 0 && Z < Size)
+    {
+        FVector CurrentVelocity = WindGrid->GetCell(X, Y, Z);
+        FVector NewVelocity = CurrentVelocity + WindVelocity;
+        WindGrid->SetCell(X, Y, Z, NewVelocity);
 
-        // Trigger the OnWindCellUpdated event
-        OnWindCellUpdated.Broadcast(Location, AdaptiveGrid[Index].Velocity, CellSize);
+        // Notify listeners about the updated cell
+        OnWindCellUpdated.Broadcast(Location, NewVelocity, WindGrid->GetCellSize());
+    }
+    else
+    {
+        WINDSYSTEM_LOG_WARNING(TEXT("Attempted to add wind outside the grid bounds"));
     }
 }
 
@@ -434,22 +374,6 @@ void UWindSimulationComponent::AddWindAtLocation(const FVector& Location, const 
 FWindSimulationWorker::FWindSimulationWorker(UWindSimulationComponent* InOwner)
     : Owner(InOwner), bShouldRun(true)
 {
-}
-
-void UWindSimulationComponent::GetGridCell(const FVector& WorldLocation, int32& OutX, int32& OutY, int32& OutZ) const
-{
-    FVector LocalPos = GetComponentTransform().InverseTransformPosition(WorldLocation);
-
-    OutX = FMath::FloorToInt(LocalPos.X / CellSize);
-    OutY = FMath::FloorToInt(LocalPos.Y / CellSize);
-    OutZ = FMath::FloorToInt(LocalPos.Z / CellSize);
-
-    // Log if we're outside the grid bounds
-    if (OutX < 0 || OutX >= BaseGridSize || OutY < 0 || OutY >= BaseGridSize || OutZ < 0 || OutZ >= BaseGridSize)
-    {
-        WINDSYSTEM_LOG_WARNING(TEXT("GetGridCell: Location out of grid bounds: World(%s), Local(%s), Grid(%d, %d, %d)"),
-            *WorldLocation.ToString(), *LocalPos.ToString(), OutX, OutY, OutZ);
-    }
 }
 
 uint32 FWindSimulationWorker::Run()
