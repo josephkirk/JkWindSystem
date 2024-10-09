@@ -67,14 +67,13 @@ void UWindDebugVisualizer::OnWindCellUpdated(const FVector& CellCenter, const FV
 
 void UWindDebugVisualizer::DrawDebugArrow(const UWorld* World, const FVector& Start, const FVector& End, const FVector& Velocity)
 {
-    FColor ArrowColorFColor = ArrowColor.ToFColor(true);
-    DrawDebugDirectionalArrow(World, Start, End, 20.0f, ArrowColorFColor, false, -1.0f, 0, ArrowThickness);
+    DrawDebugDirectionalArrow(World, Start, End, 20.0f, ArrowColor, false, -1.0f, 0, ArrowThickness);
 }
 
 void UWindDebugVisualizer::DrawDebugVelocityText(const UWorld* World, const FVector& Location, const FVector& Velocity)
 {
     FString VelocityText = FString::Printf(TEXT("%.2f, %.2f, %.2f"), Velocity.X, Velocity.Y, Velocity.Z);
-    DrawDebugString(World, Location, VelocityText, nullptr, ArrowColor.ToFColor(true), 0.0f, false, TextScale);
+    DrawDebugString(World, Location, VelocityText, nullptr, ArrowColor, 0.0f, false, TextScale);
 }
 
 void UWindDebugVisualizer::DrawDebugAdaptiveGrid(const UWorld* World)
