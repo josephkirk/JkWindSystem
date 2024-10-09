@@ -23,16 +23,18 @@ public class JK_WindSystemTests : ModuleRules
                 "Slate",
                 "SlateCore",
                 "UnrealEd",
-                "Engine",
                 "FunctionalTesting",
                 "AutomationController"
             }
         );
 
         // Add this line to include the HeadMountedDisplay module
-        if (Target.bBuildDevelopmentTools)
-        {
             PrivateDependencyModuleNames.Add("HeadMountedDisplay");
-        }
+        
+        // Uncomment this if you need to use UMG in your tests
+        // PrivateDependencyModuleNames.Add("UMG");
+
+        // Uncomment this if you need to use the new Chaos physics system
+        // PrivateDependencyModuleNames.Add("Chaos");
     }
 }

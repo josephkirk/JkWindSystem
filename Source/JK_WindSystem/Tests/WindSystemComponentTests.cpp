@@ -3,7 +3,7 @@
 #include "WindSystemComponent.h"
 #include "GameFramework/Actor.h"
 #include "Engine/World.h"
-#include "Tests/AutomationCommon.h"
+#include "Tests/AutomationEditorCommon.h"
 #include "Engine/Engine.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
