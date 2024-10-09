@@ -8,8 +8,6 @@
 #include "DrawDebugHelpers.h"
 #include "WindSystemVisualizer.generated.h"
 
-class UWindSimulationSubsystem;
-
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class JK_WINDSYSTEM_API UWindDebugVisualizer : public UActorComponent
 {
@@ -29,7 +27,7 @@ public:
     float ArrowThickness = 2.0f;
 
     UPROPERTY(EditAnywhere, Category = "Debug")
-    FLinearColor ArrowColor = FLinearColor::Cyan;
+    FColor ArrowColor = FColor::Cyan;
 
     UPROPERTY(EditAnywhere, Category = "Debug")
     float MinVelocityThreshold = 0.1f;
