@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "Engine/World.h"
 #include "Tests/AutomationCommon.h"
+#include "Engine/Engine.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -11,10 +12,27 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWindSystemComponentInitializationTest, "JK_Win
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWindSystemComponentVelocityTest, "JK_WindSystem.Component.VelocityCalculation", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWindSystemComponentSimulationStepTest, "JK_WindSystem.Component.SimulationStep", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter)
 
+UWorld* CreateTestWorld()
+{
+    UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
+    FWorldContext& WorldContext = GEngine->CreateNewWorldContext(EWorldType::Game);
+    WorldContext.SetCurrentWorld(TestWorld);
+    return TestWorld;
+}
+
+void DestroyTestWorld(UWorld* TestWorld)
+{
+    if (TestWorld)
+    {
+        GEngine->DestroyWorldContext(TestWorld);
+        TestWorld->DestroyWorld(false);
+    }
+}
+
 bool FWindSystemComponentInitializationTest::RunTest(const FString& Parameters)
 {
     // Create a new world for testing
-    UWorld* TestWorld = FAutomationEditorCommonUtils::CreateNewMap();
+    UWorld* TestWorld = CreateTestWorld();
     
     // Spawn an actor with WindSystemComponent
     AActor* TestActor = TestWorld->SpawnActor<AActor>();
@@ -29,13 +47,14 @@ bool FWindSystemComponentInitializationTest::RunTest(const FString& Parameters)
 
     // Clean up
     TestWorld->DestroyActor(TestActor);
+    DestroyTestWorld(TestWorld);
     
     return true;
 }
 
 bool FWindSystemComponentVelocityTest::RunTest(const FString& Parameters)
 {
-    UWorld* TestWorld = FAutomationEditorCommonUtils::CreateNewMap();
+    UWorld* TestWorld = CreateTestWorld();
     
     AActor* TestActor = TestWorld->SpawnActor<AActor>();
     UWindSimulationComponent* WindComponent = NewObject<UWindSimulationComponent>(TestActor);
@@ -60,13 +79,14 @@ bool FWindSystemComponentVelocityTest::RunTest(const FString& Parameters)
 
     // Clean up
     TestWorld->DestroyActor(TestActor);
+    DestroyTestWorld(TestWorld);
     
     return true;
 }
 
 bool FWindSystemComponentSimulationStepTest::RunTest(const FString& Parameters)
 {
-    UWorld* TestWorld = FAutomationEditorCommonUtils::CreateNewMap();
+    UWorld* TestWorld = CreateTestWorld();
     
     AActor* TestActor = TestWorld->SpawnActor<AActor>();
     UWindSimulationComponent* WindComponent = NewObject<UWindSimulationComponent>(TestActor);
@@ -102,6 +122,7 @@ bool FWindSystemComponentSimulationStepTest::RunTest(const FString& Parameters)
 
     // Clean up
     TestWorld->DestroyActor(TestActor);
+    DestroyTestWorld(TestWorld);
     
     return true;
 }
