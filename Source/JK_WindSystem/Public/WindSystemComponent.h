@@ -61,6 +61,14 @@ public:
     //UPROPERTY(EditAnywhere, Category = "Wind Simulation")
     //float SimulationFrequency;
 
+    
+    // Expose these for the visualizer
+    UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
+    int32 GetBaseGridSize() const { return BaseGridSize; }
+
+    UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
+    float GetCellSize() const { return CellSize; }
+
     void SimulationStep(float DeltaTime);
 
 private:
@@ -73,7 +81,7 @@ private:
 
     FWindSimulationWorker* SimulationWorker;
     FRunnableThread* SimulationThread;
-
+    
     void InitializeGrid();
     void UpdateAdaptiveGrid();
     void Subdivide(FAdaptiveGridCell& Cell);
