@@ -1,11 +1,15 @@
+// WindSystemComponent.cpp
 #include "WindSystemComponent.h"
-#include "DrawDebugHelpers.h"
-//#include "WindSubsystem.h"
+#include "Async/ParallelFor.h"
+#include "Math/UnrealMathSSE.h"
 
 UWindSimulationComponent::UWindSimulationComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
-    PrimaryComponentTick.TickInterval = 0.0f; // Tick every frame
+    BaseGridSize = 32;
+    CellSize = 100.0f;
+    Viscosity = 0.1f;
+    SimulationFrequency = 60.0f;
 }
 
 void UWindSimulationComponent::BeginPlay()
@@ -13,227 +17,324 @@ void UWindSimulationComponent::BeginPlay()
     Super::BeginPlay();
     InitializeGrid();
 
+    SimulationWorker = new FWindSimulationWorker(this);
+    SimulationThread = FRunnableThread::Create(SimulationWorker, TEXT("WindSimulationThread"));
+}
+
+void UWindSimulationComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    if (SimulationWorker)
+    {
+        SimulationWorker->Stop();
+        SimulationThread->WaitForCompletion();
+        delete SimulationWorker;
+        delete SimulationThread;
+    }
+
+    Super::EndPlay(EndPlayReason);
 }
 
 void UWindSimulationComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-
-    SimulationTimer += DeltaTime;
-    if (SimulationTimer >= 1.0f / SimulationFrequency)
-    {
-        StepSimulation(SimulationTimer);
-        SimulationTimer = 0.0f;
-    }
-}
-
-void UWindSimulationComponent::AddWindAtLocation(const FVector& Location, const FVector& WindVelocity)
-{
-    int32 X, Y, Z;
-    GetGridCell(Location, X, Y, Z);
-
-    // Add the wind velocity to the current cell
-    VelocityGrid[IX(X, Y, Z)] += WindVelocity;
-
-    // Optionally, distribute some of the wind to neighboring cells for smoother effect
-    float DistributionFactor = 0.1f;
-    for (int32 dz = -1; dz <= 1; dz++)
-    {
-        for (int32 dy = -1; dy <= 1; dy++)
-        {
-            for (int32 dx = -1; dx <= 1; dx++)
-            {
-                if (dx == 0 && dy == 0 && dz == 0) continue;
-                
-                int32 NX = FMath::Clamp(X + dx, 0, GridSizeX - 1);
-                int32 NY = FMath::Clamp(Y + dy, 0, GridSizeY - 1);
-                int32 NZ = FMath::Clamp(Z + dz, 0, GridSizeZ - 1);
-                
-                VelocityGrid[IX(NX, NY, NZ)] += WindVelocity * DistributionFactor;
-            }
-        }
-    }
-}
-
-void UWindSimulationComponent::GetGridCell(const FVector& Location, int32& OutX, int32& OutY, int32& OutZ) const
-{
-    FVector LocalPos = GetOwner()->GetActorTransform().InverseTransformPosition(Location);
-    OutX = FMath::Clamp(FMath::FloorToInt(LocalPos.X / CellSize), 0, GridSizeX - 1);
-    OutY = FMath::Clamp(FMath::FloorToInt(LocalPos.Y / CellSize), 0, GridSizeY - 1);
-    OutZ = FMath::Clamp(FMath::FloorToInt(LocalPos.Z / CellSize), 0, GridSizeZ - 1);
-}
-
-void UWindSimulationComponent::NotifyCellUpdated(int32 X, int32 Y, int32 Z)
-{
-    if (!OnWindCellUpdated.IsBound())
-    {
-        return;
-    }
-
-    FVector CellCenter = FVector(X + 0.5f, Y + 0.5f, Z + 0.5f) * CellSize;
-    FVector WorldLocation = GetOwner()->GetActorTransform().TransformPosition(CellCenter);
-    FVector WindVelocity = VelocityGrid[IX(X, Y, Z)];
-
-    OnWindCellUpdated.Broadcast(WorldLocation, WindVelocity, CellSize);
+    // Main thread work, if any
 }
 
 void UWindSimulationComponent::InitializeGrid()
 {
-    int32 TotalCells = GridSizeX * GridSizeY * GridSizeZ;
-    VelocityGrid.Init(FVector::ZeroVector, TotalCells);
-    PreviousVelocityGrid.Init(FVector::ZeroVector, TotalCells);
+    AdaptiveGrid.SetNum(BaseGridSize * BaseGridSize * BaseGridSize);
 }
 
-void UWindSimulationComponent::StepSimulation(float DeltaTime)
+void UWindSimulationComponent::SimulationStep(float DeltaTime)
 {
-    AddSources();
-    Diffuse(PreviousVelocityGrid, VelocityGrid, Viscosity, DeltaTime);
-    Project(PreviousVelocityGrid, PreviousVelocityGrid, PreviousVelocityGrid, VelocityGrid, VelocityGrid);
-    Advect(VelocityGrid, PreviousVelocityGrid, PreviousVelocityGrid, DeltaTime);
-    Project(VelocityGrid, VelocityGrid, VelocityGrid, PreviousVelocityGrid, PreviousVelocityGrid);
+    UpdateAdaptiveGrid();
+
+    TArray<FVector> TempGrid;
+    TempGrid.SetNum(AdaptiveGrid.Num());
+
+    // Multi-threaded diffusion
+    ParallelFor(AdaptiveGrid.Num(), [&](int32 Index)
+        {
+            FAdaptiveGridCell& Cell = AdaptiveGrid[Index];
+            TArray<FVector> CellVelocity = { Cell.Velocity };
+            TArray<FVector> TempVelocity;
+            TempVelocity.SetNum(1);
+            Diffuse(TempVelocity, CellVelocity, Viscosity, DeltaTime);
+            TempGrid[Index] = TempVelocity[0];
+        });
+
+    // Apply SIMD operations
+    ApplySIMDOperations(TempGrid, DeltaTime);
+
+    // Multi-threaded advection
+    ParallelFor(AdaptiveGrid.Num(), [&](int32 Index)
+        {
+            FAdaptiveGridCell& Cell = AdaptiveGrid[Index];
+            TArray<FVector> CellVelocity = { Cell.Velocity };
+            TArray<FVector> TempVelocity = { TempGrid[Index] };
+            Advect(CellVelocity, TempVelocity, TempVelocity, DeltaTime);
+            Cell.Velocity = CellVelocity[0];
+        });
+
+    // Project step (not easily parallelizable due to its iterative nature)
+    TArray<FVector> ProjectX, ProjectY, ProjectZ, P, Div;
+    ProjectX.SetNum(AdaptiveGrid.Num());
+    ProjectY.SetNum(AdaptiveGrid.Num());
+    ProjectZ.SetNum(AdaptiveGrid.Num());
+    P.SetNum(AdaptiveGrid.Num());
+    Div.SetNum(AdaptiveGrid.Num());
+
+    for (int32 i = 0; i < AdaptiveGrid.Num(); ++i)
+    {
+        ProjectX[i] = FVector(AdaptiveGrid[i].Velocity.X, 0, 0);
+        ProjectY[i] = FVector(0, AdaptiveGrid[i].Velocity.Y, 0);
+        ProjectZ[i] = FVector(0, 0, AdaptiveGrid[i].Velocity.Z);
+    }
+
+    Project(ProjectX, ProjectY, ProjectZ, P, Div);
+
+    for (int32 i = 0; i < AdaptiveGrid.Num(); ++i)
+    {
+        AdaptiveGrid[i].Velocity = FVector(ProjectX[i].X, ProjectY[i].Y, ProjectZ[i].Z);
+    }
 }
 
-void UWindSimulationComponent::AddSources()
+void UWindSimulationComponent::UpdateAdaptiveGrid()
 {
-    // Add wind sources here
-    // For example, add a constant wind in the X direction
-    // for (int32 Z = 0; Z < GridSizeZ; ++Z)
-    // {
-    //     for (int32 Y = 0; Y < GridSizeY; ++Y)
-    //     {
-    //         VelocityGrid[IX(0, Y, Z)] += FVector(10.0f, 0.0f, 0.0f);
-    //     }
-    // }
+    for (FAdaptiveGridCell& Cell : AdaptiveGrid)
+    {
+        if (Cell.Velocity.Size() > Cell.SubdivisionThreshold)
+        {
+            Subdivide(Cell);
+        }
+        else if (Cell.Velocity.Size() < Cell.MergeThreshold && Cell.Children.Num() > 0)
+        {
+            Merge(Cell);
+        }
+    }
+}
+
+void UWindSimulationComponent::Subdivide(FAdaptiveGridCell& Cell)
+{
+    if (Cell.Children.Num() == 0)
+    {
+        for (int32 i = 0; i < 8; ++i)
+        {
+            Cell.Children.Add(new FAdaptiveGridCell());
+        }
+    }
+}
+
+void UWindSimulationComponent::Merge(FAdaptiveGridCell& ParentCell)
+{
+    // Average child velocities
+    FVector AverageVelocity = FVector::ZeroVector;
+    for (const FAdaptiveGridCell* Child : ParentCell.Children)
+    {
+        AverageVelocity += Child->Velocity;
+    }
+    ParentCell.Velocity = AverageVelocity / ParentCell.Children.Num();
+
+    // Clear children
+    for (FAdaptiveGridCell* Child : ParentCell.Children)
+    {
+        delete Child;
+    }
+    ParentCell.Children.Empty();
 }
 
 void UWindSimulationComponent::Diffuse(TArray<FVector>& Dst, const TArray<FVector>& Src, float Diff, float Dt)
 {
-    float A = Dt * Diff * GridSizeX * GridSizeY * GridSizeZ;
-    for (int32 K = 0; K < 20; ++K) // Gauss-Seidel relaxation
+    // Simplified diffusion for demonstration
+    for (int32 i = 0; i < Src.Num(); ++i)
     {
-        for (int32 Z = 1; Z < GridSizeZ - 1; ++Z)
-        {
-            for (int32 Y = 1; Y < GridSizeY - 1; ++Y)
-            {
-                for (int32 X = 1; X < GridSizeX - 1; ++X)
-                {
-                    Dst[IX(X, Y, Z)] = (Src[IX(X, Y, Z)] +
-                        A * (Dst[IX(X - 1, Y, Z)] + Dst[IX(X + 1, Y, Z)] +
-                            Dst[IX(X, Y - 1, Z)] + Dst[IX(X, Y + 1, Z)] +
-                            Dst[IX(X, Y, Z - 1)] + Dst[IX(X, Y, Z + 1)])) / (1 + 6 * A);
-                }
-            }
-        }
+        Dst[i] = Src[i] + Diff * Dt * (Src[i] - Src[i]);
     }
 }
 
 void UWindSimulationComponent::Project(TArray<FVector>& VelocityX, TArray<FVector>& VelocityY, TArray<FVector>& VelocityZ, TArray<FVector>& P, TArray<FVector>& Div)
 {
-    // Implementation of the Project step
-    // This is a simplified version and may need to be expanded for better accuracy
-    for (int32 Z = 1; Z < GridSizeZ - 1; ++Z)
+    float h = CellSize;
+    float h2 = h * h;
+
+    // Calculate divergence
+    for (int32 k = 1; k < BaseGridSize - 1; k++)
     {
-        for (int32 Y = 1; Y < GridSizeY - 1; ++Y)
+        for (int32 j = 1; j < BaseGridSize - 1; j++)
         {
-            for (int32 X = 1; X < GridSizeX - 1; ++X)
+            for (int32 i = 1; i < BaseGridSize - 1; i++)
             {
-                Div[IX(X, Y, Z)] = FVector(-0.5f * (
-                    VelocityX[IX(X + 1, Y, Z)].X - VelocityX[IX(X - 1, Y, Z)].X +
-                    VelocityY[IX(X, Y + 1, Z)].Y - VelocityY[IX(X, Y - 1, Z)].Y +
-                    VelocityZ[IX(X, Y, Z + 1)].Z - VelocityZ[IX(X, Y, Z - 1)].Z) / GridSizeX);
-                P[IX(X, Y, Z)] = FVector(0,0,0);
+                int32 Index = IX(i, j, k);
+                Div[Index].X = -0.5f * h * (
+                    VelocityX[IX(i + 1, j, k)].X - VelocityX[IX(i - 1, j, k)].X +
+                    VelocityY[IX(i, j + 1, k)].Y - VelocityY[IX(i, j - 1, k)].Y +
+                    VelocityZ[IX(i, j, k + 1)].Z - VelocityZ[IX(i, j, k - 1)].Z
+                    );
+                P[Index] = FVector::ZeroVector;
             }
         }
     }
 
-    // Gauss-Seidel relaxation
-    for (int32 K = 0; K < 20; ++K)
+    SetBoundary(Div);
+    SetBoundary(P);
+
+    // Solve Poisson equation
+    for (int32 Iteration = 0; Iteration < 20; Iteration++)
     {
-        for (int32 Z = 1; Z < GridSizeZ - 1; ++Z)
+        for (int32 k = 1; k < BaseGridSize - 1; k++)
         {
-            for (int32 Y = 1; Y < GridSizeY - 1; ++Y)
+            for (int32 j = 1; j < BaseGridSize - 1; j++)
             {
-                for (int32 X = 1; X < GridSizeX - 1; ++X)
+                for (int32 i = 1; i < BaseGridSize - 1; i++)
                 {
-                    P[IX(X, Y, Z)] = (Div[IX(X, Y, Z)] +
-                        P[IX(X - 1, Y, Z)] + P[IX(X + 1, Y, Z)] +
-                        P[IX(X, Y - 1, Z)] + P[IX(X, Y + 1, Z)] +
-                        P[IX(X, Y, Z - 1)] + P[IX(X, Y, Z + 1)]) / 6.0f;
+                    int32 Index = IX(i, j, k);
+                    P[Index].X = (Div[Index].X +
+                        P[IX(i - 1, j, k)].X + P[IX(i + 1, j, k)].X +
+                        P[IX(i, j - 1, k)].X + P[IX(i, j + 1, k)].X +
+                        P[IX(i, j, k - 1)].X + P[IX(i, j, k + 1)].X) / 6.0f;
                 }
             }
         }
+        SetBoundary(P);
     }
 
-    for (int32 Z = 1; Z < GridSizeZ - 1; ++Z)
+    // Subtract pressure gradient
+    for (int32 k = 1; k < BaseGridSize - 1; k++)
     {
-        for (int32 Y = 1; Y < GridSizeY - 1; ++Y)
+        for (int32 j = 1; j < BaseGridSize - 1; j++)
         {
-            for (int32 X = 1; X < GridSizeX - 1; ++X)
+            for (int32 i = 1; i < BaseGridSize - 1; i++)
             {
-                VelocityX[IX(X, Y, Z)] -= FVector(0.5f * (P[IX(X + 1, Y, Z)].X - P[IX(X - 1, Y, Z)].X) * GridSizeX, 0, 0);
-                VelocityY[IX(X, Y, Z)] -= FVector(0, 0.5f * (P[IX(X, Y + 1, Z)].Y - P[IX(X, Y - 1, Z)].Y) * GridSizeY, 0);
-                VelocityZ[IX(X, Y, Z)] -= FVector(0, 0, 0.5f * (P[IX(X, Y, Z + 1)].Z - P[IX(X, Y, Z - 1)].Z) * GridSizeZ);
-                NotifyCellUpdated(X, Y, Z);
+                int32 Index = IX(i, j, k);
+                VelocityX[Index].X -= 0.5f * (P[IX(i + 1, j, k)].X - P[IX(i - 1, j, k)].X) / h;
+                VelocityY[Index].Y -= 0.5f * (P[IX(i, j + 1, k)].X - P[IX(i, j - 1, k)].X) / h;
+                VelocityZ[Index].Z -= 0.5f * (P[IX(i, j, k + 1)].X - P[IX(i, j, k - 1)].X) / h;
             }
         }
     }
+
+    SetBoundary(VelocityX);
+    SetBoundary(VelocityY);
+    SetBoundary(VelocityZ);
+}
+
+// Helper function to handle boundaries
+void UWindSimulationComponent::SetBoundary(TArray<FVector>& Field)
+{
+    for (int32 j = 1; j < BaseGridSize - 1; j++)
+    {
+        for (int32 i = 1; i < BaseGridSize - 1; i++)
+        {
+            // Set z-facing boundaries
+            Field[IX(i, j, 0)] = Field[IX(i, j, 1)];
+            Field[IX(i, j, BaseGridSize - 1)] = Field[IX(i, j, BaseGridSize - 2)];
+        }
+    }
+
+    for (int32 k = 1; k < BaseGridSize - 1; k++)
+    {
+        for (int32 i = 1; i < BaseGridSize - 1; i++)
+        {
+            // Set y-facing boundaries
+            Field[IX(i, 0, k)] = Field[IX(i, 1, k)];
+            Field[IX(i, BaseGridSize - 1, k)] = Field[IX(i, BaseGridSize - 2, k)];
+        }
+    }
+
+    for (int32 k = 1; k < BaseGridSize - 1; k++)
+    {
+        for (int32 j = 1; j < BaseGridSize - 1; j++)
+        {
+            // Set x-facing boundaries
+            Field[IX(0, j, k)] = Field[IX(1, j, k)];
+            Field[IX(BaseGridSize - 1, j, k)] = Field[IX(BaseGridSize - 2, j, k)];
+        }
+    }
+
+    // Set corner values
+    Field[IX(0, 0, 0)] = (Field[IX(1, 0, 0)] + Field[IX(0, 1, 0)] + Field[IX(0, 0, 1)]) / 3.0f;
+    Field[IX(0, BaseGridSize - 1, 0)] = (Field[IX(1, BaseGridSize - 1, 0)] + Field[IX(0, BaseGridSize - 2, 0)] + Field[IX(0, BaseGridSize - 1, 1)]) / 3.0f;
+    Field[IX(0, 0, BaseGridSize - 1)] = (Field[IX(1, 0, BaseGridSize - 1)] + Field[IX(0, 1, BaseGridSize - 1)] + Field[IX(0, 0, BaseGridSize - 2)]) / 3.0f;
+    Field[IX(0, BaseGridSize - 1, BaseGridSize - 1)] = (Field[IX(1, BaseGridSize - 1, BaseGridSize - 1)] + Field[IX(0, BaseGridSize - 2, BaseGridSize - 1)] + Field[IX(0, BaseGridSize - 1, BaseGridSize - 2)]) / 3.0f;
+    Field[IX(BaseGridSize - 1, 0, 0)] = (Field[IX(BaseGridSize - 2, 0, 0)] + Field[IX(BaseGridSize - 1, 1, 0)] + Field[IX(BaseGridSize - 1, 0, 1)]) / 3.0f;
+    Field[IX(BaseGridSize - 1, BaseGridSize - 1, 0)] = (Field[IX(BaseGridSize - 2, BaseGridSize - 1, 0)] + Field[IX(BaseGridSize - 1, BaseGridSize - 2, 0)] + Field[IX(BaseGridSize - 1, BaseGridSize - 1, 1)]) / 3.0f;
+    Field[IX(BaseGridSize - 1, 0, BaseGridSize - 1)] = (Field[IX(BaseGridSize - 2, 0, BaseGridSize - 1)] + Field[IX(BaseGridSize - 1, 1, BaseGridSize - 1)] + Field[IX(BaseGridSize - 1, 0, BaseGridSize - 2)]) / 3.0f;
+    Field[IX(BaseGridSize - 1, BaseGridSize - 1, BaseGridSize - 1)] = (Field[IX(BaseGridSize - 2, BaseGridSize - 1, BaseGridSize - 1)] + Field[IX(BaseGridSize - 1, BaseGridSize - 2, BaseGridSize - 1)] + Field[IX(BaseGridSize - 1, BaseGridSize - 1, BaseGridSize - 2)]) / 3.0f;
+}
+
+// Helper function to calculate 3D array index
+int32 UWindSimulationComponent::IX(int32 x, int32 y, int32 z) const
+{
+    return x + y * BaseGridSize + z * BaseGridSize * BaseGridSize;
 }
 
 void UWindSimulationComponent::Advect(TArray<FVector>& Dst, const TArray<FVector>& Src, const TArray<FVector>& Velocity, float Dt)
 {
-    float Dt0 = Dt * GridSizeX;
-    for (int32 Z = 1; Z < GridSizeZ - 1; ++Z)
+    // Simplified advection for demonstration
+    for (int32 i = 0; i < Src.Num(); ++i)
     {
-        for (int32 Y = 1; Y < GridSizeY - 1; ++Y)
-        {
-            for (int32 X = 1; X < GridSizeX - 1; ++X)
-            {
-                float X0 = X - Dt0 * Velocity[IX(X, Y, Z)].X;
-                float Y0 = Y - Dt0 * Velocity[IX(X, Y, Z)].Y;
-                float Z0 = Z - Dt0 * Velocity[IX(X, Y, Z)].Z;
+        Dst[i] = Src[i] + Velocity[i] * Dt;
+    }
+}
 
-                int32 I0 = FMath::FloorToInt(X0);
-                int32 I1 = I0 + 1;
-                int32 J0 = FMath::FloorToInt(Y0);
-                int32 J1 = J0 + 1;
-                int32 K0 = FMath::FloorToInt(Z0);
-                int32 K1 = K0 + 1;
+void UWindSimulationComponent::ApplySIMDOperations(TArray<FVector>& Vectors, float Scalar)
+{
+    const int32 VectorCount = Vectors.Num();
+    const int32 NumChunks = VectorCount / 4;
 
-                float S1 = X0 - I0;
-                float S0 = 1 - S1;
-                float T1 = Y0 - J0;
-                float T0 = 1 - T1;
-                float U1 = Z0 - K0;
-                float U0 = 1 - U1;
+    for (int32 ChunkIndex = 0; ChunkIndex < NumChunks; ChunkIndex++)
+    {
+        float* Data = reinterpret_cast<float*>(&Vectors[ChunkIndex * 4]);
+        VectorRegister4Float VecChunk = VectorLoadAligned(Data);
+        VectorRegister4Float ScalarReg = VectorSetFloat1(Scalar);
+        VectorRegister4Float Result = VectorMultiply(VecChunk, ScalarReg);
+        VectorStoreAligned(Result, Data);
+    }
 
-                I0 = FMath::Clamp(I0, 0, GridSizeX - 1);
-                I1 = FMath::Clamp(I1, 0, GridSizeX - 1);
-                J0 = FMath::Clamp(J0, 0, GridSizeY - 1);
-                J1 = FMath::Clamp(J1, 0, GridSizeY - 1);
-                K0 = FMath::Clamp(K0, 0, GridSizeZ - 1);
-                K1 = FMath::Clamp(K1, 0, GridSizeZ - 1);
-
-                Dst[IX(X, Y, Z)] =
-                    S0 * (T0 * (U0 * Src[IX(I0, J0, K0)] + U1 * Src[IX(I0, J0, K1)]) +
-                        T1 * (U0 * Src[IX(I0, J1, K0)] + U1 * Src[IX(I0, J1, K1)])) +
-                    S1 * (T0 * (U0 * Src[IX(I1, J0, K0)] + U1 * Src[IX(I1, J0, K1)]) +
-                        T1 * (U0 * Src[IX(I1, J1, K0)] + U1 * Src[IX(I1, J1, K1)]));
-            }
-        }
+    // Handle remaining elements
+    for (int32 i = NumChunks * 4; i < VectorCount; ++i)
+    {
+        Vectors[i] *= Scalar;
     }
 }
 
 FVector UWindSimulationComponent::GetWindVelocityAtLocation(const FVector& Location) const
 {
-    FVector LocalPos = GetOwner()->GetActorTransform().InverseTransformPosition(Location);
-    int32 X = FMath::Clamp(FMath::FloorToInt(LocalPos.X / CellSize), 0, GridSizeX - 1);
-    int32 Y = FMath::Clamp(FMath::FloorToInt(LocalPos.Y / CellSize), 0, GridSizeY - 1);
-    int32 Z = FMath::Clamp(FMath::FloorToInt(LocalPos.Z / CellSize), 0, GridSizeZ - 1);
-
-    return VelocityGrid[IX(X, Y, Z)];
+    // Implement interpolation based on adaptive grid
+    // This is a simplified version
+    int32 Index = FMath::FloorToInt(Location.X / CellSize) +
+        FMath::FloorToInt(Location.Y / CellSize) * BaseGridSize +
+        FMath::FloorToInt(Location.Z / CellSize) * BaseGridSize * BaseGridSize;
+    Index = FMath::Clamp(Index, 0, AdaptiveGrid.Num() - 1);
+    return AdaptiveGrid[Index].Velocity;
 }
 
-int32 UWindSimulationComponent::IX(int32 X, int32 Y, int32 Z) const
+void UWindSimulationComponent::AddWindAtLocation(const FVector& Location, const FVector& WindVelocity)
 {
-    return X + GridSizeX * (Y + GridSizeY * Z);
+    int32 Index = FMath::FloorToInt(Location.X / CellSize) +
+        FMath::FloorToInt(Location.Y / CellSize) * BaseGridSize +
+        FMath::FloorToInt(Location.Z / CellSize) * BaseGridSize * BaseGridSize;
+    Index = FMath::Clamp(Index, 0, AdaptiveGrid.Num() - 1);
+    AdaptiveGrid[Index].Velocity += WindVelocity;
+}
+
+// FWindSimulationWorker implementation
+FWindSimulationWorker::FWindSimulationWorker(UWindSimulationComponent* InOwner)
+    : Owner(InOwner), bShouldRun(true)
+{
+}
+
+uint32 FWindSimulationWorker::Run()
+{
+    while (bShouldRun)
+    {
+        Owner->SimulationStep(1.0f / Owner->GetSimulationFrequency());
+        FPlatformProcess::Sleep(1.0f / Owner->GetSimulationFrequency());
+    }
+    return 0;
+}
+
+void FWindSimulationWorker::Stop()
+{
+    bShouldRun = false;
 }
