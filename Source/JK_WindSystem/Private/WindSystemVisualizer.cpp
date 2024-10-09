@@ -43,11 +43,6 @@ void UWindDebugVisualizer::TickComponent(float DeltaTime, ELevelTick TickType, F
     }
 }
 
-UWorld* UWindDebugVisualizer::GetWorld() const
-{
-    return Super::GetWorld();
-}
-
 void UWindDebugVisualizer::OnWindCellUpdated(const FVector& CellCenter, const FVector& WindVelocity, float CellSize)
 {
     UWorld* World = GetWorld();

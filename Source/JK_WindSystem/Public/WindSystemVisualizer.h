@@ -49,8 +49,6 @@ public:
     UPROPERTY(EditAnywhere, Category = "Debug")
     int32 VisualizationResolution = 5;
 
-    virtual UWorld* GetWorld() const override;
-
 private:
     UFUNCTION()
     void OnWindCellUpdated(const FVector& CellCenter, const FVector& WindVelocity, float CellSize);
