@@ -1,4 +1,4 @@
-# Real time Wind System for Open World Game
+# Real time Wind System for Unreal Engine's Open World Game
 ## Project Overview:
 - The project focuses on implementing a real-time wind simulation in a 3D open-world game called Veloren.
 - The main research question is about the performance cost of such a simulation in terms of frame rate.
