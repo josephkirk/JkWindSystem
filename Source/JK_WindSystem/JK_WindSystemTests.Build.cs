@@ -28,5 +28,11 @@ public class JK_WindSystemTests : ModuleRules
                 "AutomationController"
             }
         );
+
+        // Add this line to include the HeadMountedDisplay module
+        if (Target.bBuildDevelopmentTools)
+        {
+            PrivateDependencyModuleNames.Add("HeadMountedDisplay");
+        }
     }
 }
