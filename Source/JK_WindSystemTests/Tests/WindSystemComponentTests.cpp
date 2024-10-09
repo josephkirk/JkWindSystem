@@ -1,10 +1,4 @@
-#include "CoreMinimal.h"
-#include "Misc/AutomationTest.h"
-#include "WindSystemComponent.h"
-#include "GameFramework/Actor.h"
-#include "Engine/World.h"
-#include "Tests/AutomationEditorCommon.h"
-#include "Engine/Engine.h"
+#include "WindSystemTestCommon.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
 
@@ -12,67 +6,46 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWindSystemComponentInitializationTest, "JK_Win
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWindSystemComponentVelocityTest, "JK_WindSystem.Component.VelocityCalculation", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWindSystemComponentSimulationStepTest, "JK_WindSystem.Component.SimulationStep", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter)
 
-UWorld* CreateTestWorld()
-{
-    UWorld* TestWorld = UWorld::CreateWorld(EWorldType::Game, false);
-    FWorldContext& WorldContext = GEngine->CreateNewWorldContext(EWorldType::Game);
-    WorldContext.SetCurrentWorld(TestWorld);
-    return TestWorld;
-}
-
-void DestroyTestWorld(UWorld* TestWorld)
-{
-    if (TestWorld)
-    {
-        GEngine->DestroyWorldContext(TestWorld);
-        TestWorld->DestroyWorld(false);
-    }
-}
-
 bool FWindSystemComponentInitializationTest::RunTest(const FString& Parameters)
 {
     UWorld* TestWorld = CreateTestWorld();
-
-    AActor* TestActor = TestWorld->SpawnActor<AActor>();
-    UWindSimulationComponent* WindComponent = NewObject<UWindSimulationComponent>(TestActor);
-    TestActor->AddOwnedComponent(WindComponent);
-    WindComponent->RegisterComponent();
-
-    // Initialize the component for testing
-    WindComponent->InitializeForTesting();
+    
+    UWindSimulationComponent* WindComponent = SetupWindSimulation(TestWorld);
 
     // Test initialization
+    TestTrue("WindComponent is valid", IsValid(WindComponent));
     TestTrue("BaseGridSize is set", WindComponent->GetBaseGridSize() > 0);
     TestTrue("CellSize is set", WindComponent->GetCellSize() > 0.0f);
     TestTrue("SimulationFrequency is set", WindComponent->GetSimulationFrequency() > 0.0f);
 
-    // Clean up
-    TestWorld->DestroyActor(TestActor);
-    DestroyTestWorld(TestWorld);
+    // Test if WindGrid is initialized
+    FVector TestLocation(100.0f, 100.0f, 100.0f);
+    FVector WindVelocity = WindComponent->GetWindVelocityAtLocation(TestLocation);
+    TestFalse("WindGrid is initialized (non-zero velocity returned)", WindVelocity.IsZero());
 
+    // Clean up
+    TestWorld->DestroyActor(WindComponent->GetOwner());
+    DestroyTestWorld(TestWorld);
+    
     return true;
 }
 
 bool FWindSystemComponentVelocityTest::RunTest(const FString& Parameters)
 {
     UWorld* TestWorld = CreateTestWorld();
+    
+    UWindSimulationComponent* WindComponent = SetupWindSimulation(TestWorld);
 
-    AActor* TestActor = TestWorld->SpawnActor<AActor>();
-    UWindSimulationComponent* WindComponent = NewObject<UWindSimulationComponent>(TestActor);
-    TestActor->AddOwnedComponent(WindComponent);
-    WindComponent->RegisterComponent();
-
-    // Initialize the component for testing
-    WindComponent->InitializeForTesting();
+    // Ensure WindComponent is valid
+    if (!TestNotNull("WindComponent is valid", WindComponent))
+    {
+        DestroyTestWorld(TestWorld);
+        return false;
+    }
 
     // Test wind velocity calculation
     FVector TestLocation(100.0f, 100.0f, 100.0f);
     FVector WindVelocity = WindComponent->GetWindVelocityAtLocation(TestLocation);
-
-    // Log the initial wind velocity
-    UE_LOG(LogTemp, Log, TEXT("Initial wind velocity at (%f, %f, %f): (%f, %f, %f)"),
-        TestLocation.X, TestLocation.Y, TestLocation.Z,
-        WindVelocity.X, WindVelocity.Y, WindVelocity.Z);
 
     // Check if the returned velocity is valid (not zero and not infinite)
     TestFalse("Wind velocity is not zero", WindVelocity.IsZero());
@@ -83,55 +56,52 @@ bool FWindSystemComponentVelocityTest::RunTest(const FString& Parameters)
     FVector AddedWind(10.0f, 0.0f, 0.0f);
     WindComponent->AddWindAtLocation(WindSource, AddedWind);
 
-    // Wait for a short time to allow the simulation to process the added wind
-    FPlatformProcess::Sleep(0.1f);
+    // Perform a simulation step to process the added wind
+    WindComponent->SimulationStep(WindTestConstants::DEFAULT_SIMULATION_DELTA_TIME);
 
     FVector NewWindVelocity = WindComponent->GetWindVelocityAtLocation(WindSource);
-
-    // Log the new wind velocity
-    UE_LOG(LogTemp, Log, TEXT("New wind velocity at (%f, %f, %f) after adding wind: (%f, %f, %f)"),
-        WindSource.X, WindSource.Y, WindSource.Z,
-        NewWindVelocity.X, NewWindVelocity.Y, NewWindVelocity.Z);
-
-    // Check if the added wind has any effect
     TestTrue("Added wind affects source location", !FMath::IsNearlyEqual(NewWindVelocity.X, WindVelocity.X, 0.01f));
 
-    // Clean up
-    TestWorld->DestroyActor(TestActor);
-    DestroyTestWorld(TestWorld);
+    // Log wind velocities for debugging
+    UE_LOG(LogTemp, Log, TEXT("Initial wind velocity: %s"), *WindVelocity.ToString());
+    UE_LOG(LogTemp, Log, TEXT("Wind velocity after adding wind: %s"), *NewWindVelocity.ToString());
 
+    // Clean up
+    TestWorld->DestroyActor(WindComponent->GetOwner());
+    DestroyTestWorld(TestWorld);
+    
     return true;
 }
 
 bool FWindSystemComponentSimulationStepTest::RunTest(const FString& Parameters)
 {
     UWorld* TestWorld = CreateTestWorld();
+    
+    UWindSimulationComponent* WindComponent = SetupWindSimulation(TestWorld);
 
-    AActor* TestActor = TestWorld->SpawnActor<AActor>();
-    UWindSimulationComponent* WindComponent = NewObject<UWindSimulationComponent>(TestActor);
-    TestActor->AddOwnedComponent(WindComponent);
-    WindComponent->RegisterComponent();
-
-    // Initialize the component for testing
-    WindComponent->InitializeForTesting();
+    // Ensure WindComponent is valid
+    if (!TestNotNull("WindComponent is valid", WindComponent))
+    {
+        DestroyTestWorld(TestWorld);
+        return false;
+    }
 
     // Record initial state
     FVector TestLocation(100.0f, 100.0f, 100.0f);
     FVector InitialVelocity = WindComponent->GetWindVelocityAtLocation(TestLocation);
 
-    UE_LOG(LogTemp, Log, TEXT("Initial velocity at (%f, %f, %f): (%f, %f, %f)"),
-        TestLocation.X, TestLocation.Y, TestLocation.Z,
-        InitialVelocity.X, InitialVelocity.Y, InitialVelocity.Z);
+    UE_LOG(LogTemp, Log, TEXT("Initial velocity at test point: %s"), *InitialVelocity.ToString());
 
-    // Perform a simulation step
-    float DeltaTime = 1.0f / WindComponent->GetSimulationFrequency();
-    WindComponent->SimulationStep(DeltaTime);
+    // Perform simulation steps
+    for (int32 i = 0; i < WindTestConstants::DEFAULT_SIMULATION_STEPS; ++i)
+    {
+        WindComponent->SimulationStep(WindTestConstants::DEFAULT_SIMULATION_DELTA_TIME);
+    }
 
     // Check if the simulation step changed the wind velocity
     FVector NewVelocity = WindComponent->GetWindVelocityAtLocation(TestLocation);
 
-    UE_LOG(LogTemp, Log, TEXT("New velocity after simulation step: (%f, %f, %f)"),
-        NewVelocity.X, NewVelocity.Y, NewVelocity.Z);
+    UE_LOG(LogTemp, Log, TEXT("New velocity after simulation steps: %s"), *NewVelocity.ToString());
 
     // We'll consider the test passed if there's any change in velocity, even if small
     TestTrue("Simulation step changes wind velocity", !NewVelocity.Equals(InitialVelocity, 0.0001f));
@@ -141,25 +111,25 @@ bool FWindSystemComponentSimulationStepTest::RunTest(const FString& Parameters)
     bool stabilized = false;
     for (int i = 0; i < 100; ++i)
     {
-        WindComponent->SimulationStep(DeltaTime);
+        WindComponent->SimulationStep(WindTestConstants::DEFAULT_SIMULATION_DELTA_TIME);
         NewVelocity = WindComponent->GetWindVelocityAtLocation(TestLocation);
-
+        
         if (NewVelocity.Equals(PreviousVelocity, 0.0001f))
         {
             UE_LOG(LogTemp, Log, TEXT("Simulation stabilized after %d steps"), i);
             stabilized = true;
             break;
         }
-
+        
         PreviousVelocity = NewVelocity;
     }
 
     TestTrue("Simulation stabilizes over time", stabilized);
 
     // Clean up
-    TestWorld->DestroyActor(TestActor);
+    TestWorld->DestroyActor(WindComponent->GetOwner());
     DestroyTestWorld(TestWorld);
-
+    
     return true;
 }
 
