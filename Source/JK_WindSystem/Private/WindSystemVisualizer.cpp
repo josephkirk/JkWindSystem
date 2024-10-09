@@ -1,8 +1,10 @@
+// WindSystemVisualizer.cpp
 #include "WindSystemVisualizer.h"
+#include "WindSubsystem.h"
 
 UWindDebugVisualizer::UWindDebugVisualizer()
 {
-    PrimaryComponentTick.bCanEverTick = false;
+    PrimaryComponentTick.bCanEverTick = true;
 }
 
 void UWindDebugVisualizer::BeginPlay()
@@ -30,6 +32,16 @@ void UWindDebugVisualizer::EndPlay(const EEndPlayReason::Type EndPlayReason)
     Super::EndPlay(EndPlayReason);
 }
 
+void UWindDebugVisualizer::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+    Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+    if (bDrawAdaptiveGrid)
+    {
+        DrawDebugAdaptiveGrid(GetWorld());
+    }
+}
+
 void UWindDebugVisualizer::OnWindCellUpdated(const FVector& CellCenter, const FVector& WindVelocity, float CellSize)
 {
     UWorld* World = GetWorld();
@@ -41,7 +53,7 @@ void UWindDebugVisualizer::OnWindCellUpdated(const FVector& CellCenter, const FV
             if (bDrawArrows)
             {
                 FVector End = CellCenter + WindVelocity * ArrowScale;
-                DrawDebugArrow(World, CellCenter, End);
+                DrawDebugArrow(World, CellCenter, End, WindVelocity);
             }
 
             if (bDrawVelocityText)
@@ -52,14 +64,17 @@ void UWindDebugVisualizer::OnWindCellUpdated(const FVector& CellCenter, const FV
     }
 }
 
-void UWindDebugVisualizer::DrawDebugArrow(const UWorld* World, const FVector& Start, const FVector& End)
+void UWindDebugVisualizer::DrawDebugArrow(const UWorld* World, const FVector& Start, const FVector& End, const FVector& Velocity)
 {
+    FColor ArrowColorIntensity = ArrowColor.ReinterpretAsLinear() * (Velocity.Size() / 10.0f);
+    ArrowColorIntensity.A = 255;
+
     DrawDebugDirectionalArrow(
         World,
         Start,
         End,
         20.0f, // Arrow Size
-        ArrowColor,
+        ArrowColorIntensity,
         false, // Persistent Lines
         DebugDrawDuration,
         0, // DepthPriority
@@ -82,3 +97,93 @@ void UWindDebugVisualizer::DrawDebugVelocityText(const UWorld* World, const FVec
     );
 }
 
+void UWindDebugVisualizer::DrawDebugAdaptiveGrid(const UWorld* World)
+{
+    if (!World || !WindSimComponent)
+        return;
+
+    UWindSimulationSubsystem* WindSubsystem = GetWindSubsystem();
+    if (!WindSubsystem)
+        return;
+
+    FVector Origin = GetOwner()->GetActorLocation();
+    float GridSize = WindSimComponent->CellSize * WindSimComponent->BaseGridSize;
+
+    for (int32 z = 0; z < VisualizationResolution; ++z)
+    {
+        for (int32 y = 0; y < VisualizationResolution; ++y)
+        {
+            for (int32 x = 0; x < VisualizationResolution; ++x)
+            {
+                FVector CellCenter = Origin + FVector(
+                    x * GridSize / VisualizationResolution,
+                    y * GridSize / VisualizationResolution,
+                    z * GridSize / VisualizationResolution
+                );
+
+                FVector WindVelocity = WindSubsystem->GetWindVelocityAtLocation(CellCenter);
+                
+                if (WindVelocity.Size() >= MinVelocityThreshold)
+                {
+                    if (bDrawArrows)
+                    {
+                        FVector End = CellCenter + WindVelocity * ArrowScale;
+                        DrawDebugArrow(World, CellCenter, End, WindVelocity);
+                    }
+
+                    if (bDrawVelocityText)
+                    {
+                        DrawDebugVelocityText(World, CellCenter, WindVelocity);
+                    }
+                }
+
+                // Draw cell boundaries
+                DrawDebugBox(World, CellCenter, FVector(GridSize / VisualizationResolution / 2), FQuat::Identity, FColor::White, false, -1, 0, 1);
+            }
+        }
+    }
+}
+
+UWindSimulationSubsystem* UWindDebugVisualizer::GetWindSubsystem() const
+{
+    if (UWorld* World = GetWorld())
+    {
+        return World->GetSubsystem<UWindSimulationSubsystem>();
+    }
+    return nullptr;
+}
+
+AWindDebugVisualizationActor::AWindDebugVisualizationActor()
+{
+    PrimaryActorTick.bCanEverTick = true;
+
+    WindDebugVisualizer = CreateDefaultSubobject<UWindDebugVisualizer>(TEXT("WindDebugVisualizer"));
+    RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("RootComponent"));
+}
+
+void AWindDebugVisualizationActor::BeginPlay()
+{
+    Super::BeginPlay();
+    UpdateVisualizerSettings();
+}
+
+void AWindDebugVisualizationActor::Tick(float DeltaTime)
+{
+    Super::Tick(DeltaTime);
+}
+
+void AWindDebugVisualizationActor::UpdateVisualizerSettings()
+{
+    if (WindDebugVisualizer)
+    {
+        WindDebugVisualizer->ArrowScale = ArrowScale;
+        WindDebugVisualizer->ArrowThickness = ArrowThickness;
+        WindDebugVisualizer->ArrowColor = ArrowColor;
+        WindDebugVisualizer->MinVelocityThreshold = MinVelocityThreshold;
+        WindDebugVisualizer->bDrawArrows = bDrawArrows;
+        WindDebugVisualizer->bDrawVelocityText = bDrawVelocityText;
+        WindDebugVisualizer->bDrawAdaptiveGrid = bDrawAdaptiveGrid;
+        WindDebugVisualizer->TextScale = TextScale;
+        WindDebugVisualizer->VisualizationResolution = VisualizationResolution;
+    }
+}

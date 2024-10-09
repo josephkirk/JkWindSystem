@@ -6,7 +6,6 @@ UWindSimulationComponent::UWindSimulationComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
     PrimaryComponentTick.TickInterval = 0.0f; // Tick every frame
-    bShowDebugVisualization = false;
 }
 
 void UWindSimulationComponent::BeginPlay()
@@ -66,7 +65,7 @@ void UWindSimulationComponent::GetGridCell(const FVector& Location, int32& OutX,
 
 void UWindSimulationComponent::NotifyCellUpdated(int32 X, int32 Y, int32 Z)
 {
-    if (!bShowDebugVisualization || !OnWindCellUpdated.IsBound())
+    if (!OnWindCellUpdated.IsBound())
     {
         return;
     }
