@@ -46,7 +46,7 @@ void UWindDebugVisualizer::TickComponent(float DeltaTime, ELevelTick TickType, F
 void UWindDebugVisualizer::OnWindCellUpdated(const FVector& CellCenter, const FVector& WindVelocity, float CellSize)
 {
     UWorld* World = GetWorld();
-    if (World && World->IsEditorWorld())
+    if (World && !World->IsNetMode(NM_DedicatedServer))
     {
         float VelocityMagnitude = WindVelocity.Size();
         if (VelocityMagnitude >= MinVelocityThreshold)
@@ -67,35 +67,14 @@ void UWindDebugVisualizer::OnWindCellUpdated(const FVector& CellCenter, const FV
 
 void UWindDebugVisualizer::DrawDebugArrow(const UWorld* World, const FVector& Start, const FVector& End, const FVector& Velocity)
 {
-    FLinearColor ArrowColorIntensity = ArrowColor * (Velocity.Size() / 10.0f);
-    ArrowColorIntensity.A = 1.0f;
-
-    DrawDebugDirectionalArrow(
-        World,
-        Start,
-        End,
-        20.0f, // Arrow Size
-        ArrowColorIntensity.ToFColor(true),
-        false, // Persistent Lines
-        -1.0f, // LifeTime
-        0, // DepthPriority
-        ArrowThickness
-    );
+    FColor ArrowColorFColor = ArrowColor.ToFColor(true);
+    DrawDebugDirectionalArrow(World, Start, End, 20.0f, ArrowColorFColor, false, -1.0f, 0, ArrowThickness);
 }
 
 void UWindDebugVisualizer::DrawDebugVelocityText(const UWorld* World, const FVector& Location, const FVector& Velocity)
 {
     FString VelocityText = FString::Printf(TEXT("%.2f, %.2f, %.2f"), Velocity.X, Velocity.Y, Velocity.Z);
-    DrawDebugString(
-        World,
-        Location,
-        VelocityText,
-        nullptr, // Actor
-        ArrowColor.ToFColor(true),
-        -1.0f, // Duration
-        false, // bDrawShadow
-        TextScale
-    );
+    DrawDebugString(World, Location, VelocityText, nullptr, ArrowColor.ToFColor(true), 0.0f, false, TextScale);
 }
 
 void UWindDebugVisualizer::DrawDebugAdaptiveGrid(const UWorld* World)
@@ -123,7 +102,7 @@ void UWindDebugVisualizer::DrawDebugAdaptiveGrid(const UWorld* World)
                 );
 
                 FVector WindVelocity = WindSubsystem->GetWindVelocityAtLocation(CellCenter);
-
+                
                 if (WindVelocity.Size() >= MinVelocityThreshold)
                 {
                     if (bDrawArrows)
@@ -138,7 +117,6 @@ void UWindDebugVisualizer::DrawDebugAdaptiveGrid(const UWorld* World)
                     }
                 }
 
-                // Draw cell boundaries
                 DrawDebugBox(World, CellCenter, FVector(GridSize / VisualizationResolution / 2), FQuat::Identity, FColor::White, false, -1, 0, 1);
             }
         }
@@ -153,7 +131,6 @@ UWindSimulationSubsystem* UWindDebugVisualizer::GetWindSubsystem() const
     }
     return nullptr;
 }
-
 
 // WindDebugVisualizationActor
 
