@@ -8,6 +8,8 @@
 #include "DrawDebugHelpers.h"
 #include "WindSystemVisualizer.generated.h"
 
+class UWindSimulationSubsystem;
+
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class JK_WINDSYSTEM_API UWindDebugVisualizer : public UActorComponent
 {
@@ -46,6 +48,8 @@ public:
 
     UPROPERTY(EditAnywhere, Category = "Debug")
     int32 VisualizationResolution = 5;
+
+    virtual UWorld* GetWorld() const override;
 
 private:
     UFUNCTION()
