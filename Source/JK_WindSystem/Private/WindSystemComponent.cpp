@@ -7,6 +7,7 @@ UWindSimulationComponent::UWindSimulationComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
     PrimaryComponentTick.TickInterval = 0.0f; // Tick every frame
+    bShowDebugVisualization = false;
 }
 
 void UWindSimulationComponent::BeginPlay()
@@ -35,56 +36,20 @@ void UWindSimulationComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
         StepSimulation(SimulationTimer);
         SimulationTimer = 0.0f;
     }
-
-    if (bShowDebugVisualization)
-    {
-        DrawDebugVisualization();
-    }
 }
 
-void UWindSimulationComponent::DrawDebugVisualization()
+void UWindSimulationComponent::NotifyCellUpdated(int32 X, int32 Y, int32 Z)
 {
-    if (!GetOwner())
+    if (!bShowDebugVisualization || !OnWindCellUpdated.IsBound())
     {
         return;
     }
 
-    UWorld* World = GetWorld();
-    if (!World)
-    {
-        return;
-    }
+    FVector CellCenter = FVector(X + 0.5f, Y + 0.5f, Z + 0.5f) * CellSize;
+    FVector WorldLocation = GetOwner()->GetActorTransform().TransformPosition(CellCenter);
+    FVector WindVelocity = VelocityGrid[IX(X, Y, Z)];
 
-    FTransform ComponentTransform = GetOwner()->GetActorTransform();
-
-    for (int32 Z = 0; Z < GridSizeZ; Z++)
-    {
-        for (int32 Y = 0; Y < GridSizeY; Y++)
-        {
-            for (int32 X = 0; X < GridSizeX; X++)
-            {
-                FVector CellCenter = FVector(X + 0.5f, Y + 0.5f, Z + 0.5f) * CellSize;
-                FVector WorldLocation = ComponentTransform.TransformPosition(CellCenter);
-
-                FVector WindVelocity = VelocityGrid[IX(X, Y, Z)];
-                
-                // Scale the velocity for better visualization
-                FVector ScaledVelocity = WindVelocity * DebugArrowScale;
-
-                DrawDebugDirectionalArrow(
-                    World,
-                    WorldLocation,
-                    WorldLocation + ScaledVelocity,
-                    20.0f, // Arrow Size
-                    DebugArrowColor,
-                    false, // Persistent Lines
-                    -1.0f, // Lifetime
-                    0, // DepthPriority
-                    DebugArrowThickness
-                );
-            }
-        }
-    }
+    OnWindCellUpdated.Broadcast(WorldLocation, WindVelocity, CellSize);
 }
 
 void UWindSimulationComponent::InitializeGrid()
@@ -183,6 +148,7 @@ void UWindSimulationComponent::Project(TArray<FVector>& VelocityX, TArray<FVecto
                 VelocityX[IX(X, Y, Z)] -= FVector(0.5f * (P[IX(X + 1, Y, Z)].X - P[IX(X - 1, Y, Z)].X) * GridSizeX, 0, 0);
                 VelocityY[IX(X, Y, Z)] -= FVector(0, 0.5f * (P[IX(X, Y + 1, Z)].Y - P[IX(X, Y - 1, Z)].Y) * GridSizeY, 0);
                 VelocityZ[IX(X, Y, Z)] -= FVector(0, 0, 0.5f * (P[IX(X, Y, Z + 1)].Z - P[IX(X, Y, Z - 1)].Z) * GridSizeZ);
+                NotifyCellUpdated(X, Y, Z);
             }
         }
     }

@@ -4,6 +4,8 @@
 #include "Components/ActorComponent.h"
 #include "WindSystemComponent.generated.h"
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnWindCellUpdated, const FVector&, CellCenter, const FVector&, WindVelocity, float, CellSize);
+
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class JK_WINDSYSTEM_API UWindSimulationComponent : public UActorComponent
 {
@@ -15,6 +17,9 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
     FVector GetWindVelocityAtLocation(const FVector& Location) const;
+
+    UPROPERTY(BlueprintAssignable, Category = "Wind Simulation|Debug")
+    FOnWindCellUpdated OnWindCellUpdated;
 
 public:
     UPROPERTY(EditAnywhere, Category = "Wind Simulation|Debug")
@@ -61,8 +66,7 @@ private:
     float SimulationTimer = 0.0f;
 
 private:
-    void DrawDebugVisualization();
-
+    void NotifyCellUpdated(int32 X, int32 Y, int32 Z);
     void InitializeGrid();
     void StepSimulation(float DeltaTime);
     void AddSources();
