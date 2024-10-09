@@ -2,6 +2,7 @@
 #include "WindSystemComponent.h"
 #include "Async/ParallelFor.h"
 #include "Math/UnrealMathSSE.h"
+#include "WindSystemLog.h"
 
 UWindSimulationComponent::UWindSimulationComponent()
 {
@@ -72,7 +73,15 @@ void UWindSimulationComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 
 void UWindSimulationComponent::InitializeGrid()
 {
-    AdaptiveGrid.SetNum(BaseGridSize * BaseGridSize * BaseGridSize);
+    int32 TotalCells = BaseGridSize * BaseGridSize * BaseGridSize;
+    AdaptiveGrid.SetNum(TotalCells);
+
+    for (int32 i = 0; i < TotalCells; ++i)
+    {
+        AdaptiveGrid[i].Velocity = FVector::ZeroVector;
+    }
+
+    WINDSYSTEM_LOG(Log, TEXT("Wind Simulation Grid Initialized: %d cells"), TotalCells);
 }
 
 void UWindSimulationComponent::SimulationStep(float DeltaTime)
@@ -328,30 +337,119 @@ void UWindSimulationComponent::ApplySIMDOperations(TArray<FVector>& Vectors, flo
     }
 }
 
-FVector UWindSimulationComponent::GetWindVelocityAtLocation(const FVector& Location) const
+FVector UWindSimulationComponent::GetWindVelocityAtLocation(const FVector& WorldLocation) const
 {
-    // Implement interpolation based on adaptive grid
-    // This is a simplified version
-    int32 Index = FMath::FloorToInt(Location.X / CellSize) +
-        FMath::FloorToInt(Location.Y / CellSize) * BaseGridSize +
-        FMath::FloorToInt(Location.Z / CellSize) * BaseGridSize * BaseGridSize;
-    Index = FMath::Clamp(Index, 0, AdaptiveGrid.Num() - 1);
-    return AdaptiveGrid[Index].Velocity;
+    int32 X, Y, Z;
+    GetGridCell(WorldLocation, X, Y, Z);
+
+    // Ensure we're within the grid bounds
+    if (X < 0 || X >= BaseGridSize || Y < 0 || Y >= BaseGridSize || Z < 0 || Z >= BaseGridSize)
+    {
+        WINDSYSTEM_LOG_WARNING(TEXT("GetWindVelocityAtLocation: Location out of grid bounds: %s"), *WorldLocation.ToString());
+        return FVector::ZeroVector;
+    }
+
+    int32 Index = IX(X, Y, Z);
+    if (Index < 0 || Index >= AdaptiveGrid.Num())
+    {
+        WINDSYSTEM_LOG_ERROR(TEXT("GetWindVelocityAtLocation: Invalid grid index %d for location %s"), Index, *WorldLocation.ToString());
+        return FVector::ZeroVector;
+    }
+
+    // Simple trilinear interpolation for smoother results
+    FVector LocalPos = GetComponentTransform().InverseTransformPosition(WorldLocation);
+    FVector CellPos(
+        (LocalPos.X / CellSize) - X,
+        (LocalPos.Y / CellSize) - Y,
+        (LocalPos.Z / CellSize) - Z
+    );
+
+    FVector InterpolatedVelocity = FVector::ZeroVector;
+    for (int32 dz = 0; dz <= 1; ++dz)
+    {
+        for (int32 dy = 0; dy <= 1; ++dy)
+        {
+            for (int32 dx = 0; dx <= 1; ++dx)
+            {
+                int32 NX = FMath::Clamp(X + dx, 0, BaseGridSize - 1);
+                int32 NY = FMath::Clamp(Y + dy, 0, BaseGridSize - 1);
+                int32 NZ = FMath::Clamp(Z + dz, 0, BaseGridSize - 1);
+
+                int32 NeighborIndex = IX(NX, NY, NZ);
+                if (NeighborIndex >= 0 && NeighborIndex < AdaptiveGrid.Num())
+                {
+                    float Weight = (dx == 0 ? 1 - CellPos.X : CellPos.X) *
+                        (dy == 0 ? 1 - CellPos.Y : CellPos.Y) *
+                        (dz == 0 ? 1 - CellPos.Z : CellPos.Z);
+
+                    InterpolatedVelocity += AdaptiveGrid[NeighborIndex].Velocity * Weight;
+                }
+            }
+        }
+    }
+
+    return InterpolatedVelocity;
 }
 
 void UWindSimulationComponent::AddWindAtLocation(const FVector& Location, const FVector& WindVelocity)
 {
-    int32 Index = FMath::FloorToInt(Location.X / CellSize) +
-        FMath::FloorToInt(Location.Y / CellSize) * BaseGridSize +
-        FMath::FloorToInt(Location.Z / CellSize) * BaseGridSize * BaseGridSize;
-    Index = FMath::Clamp(Index, 0, AdaptiveGrid.Num() - 1);
-    AdaptiveGrid[Index].Velocity += WindVelocity;
+    int32 X, Y, Z;
+    GetGridCell(Location, X, Y, Z);
+
+    // Add the wind velocity to the current cell
+    int32 Index = IX(X, Y, Z);
+    if (Index >= 0 && Index < AdaptiveGrid.Num())
+    {
+        AdaptiveGrid[Index].Velocity += WindVelocity;
+
+        // Optionally, distribute some of the wind to neighboring cells for smoother effect
+        float DistributionFactor = 0.1f;
+        for (int32 dz = -1; dz <= 1; dz++)
+        {
+            for (int32 dy = -1; dy <= 1; dy++)
+            {
+                for (int32 dx = -1; dx <= 1; dx++)
+                {
+                    if (dx == 0 && dy == 0 && dz == 0) continue;
+
+                    int32 NX = FMath::Clamp(X + dx, 0, BaseGridSize - 1);
+                    int32 NY = FMath::Clamp(Y + dy, 0, BaseGridSize - 1);
+                    int32 NZ = FMath::Clamp(Z + dz, 0, BaseGridSize - 1);
+
+                    int32 NeighborIndex = IX(NX, NY, NZ);
+                    if (NeighborIndex >= 0 && NeighborIndex < AdaptiveGrid.Num())
+                    {
+                        AdaptiveGrid[NeighborIndex].Velocity += WindVelocity * DistributionFactor;
+                    }
+                }
+            }
+        }
+
+        // Trigger the OnWindCellUpdated event
+        OnWindCellUpdated.Broadcast(Location, AdaptiveGrid[Index].Velocity, CellSize);
+    }
 }
 
 // FWindSimulationWorker implementation
 FWindSimulationWorker::FWindSimulationWorker(UWindSimulationComponent* InOwner)
     : Owner(InOwner), bShouldRun(true)
 {
+}
+
+void UWindSimulationComponent::GetGridCell(const FVector& WorldLocation, int32& OutX, int32& OutY, int32& OutZ) const
+{
+    FVector LocalPos = GetComponentTransform().InverseTransformPosition(WorldLocation);
+
+    OutX = FMath::FloorToInt(LocalPos.X / CellSize);
+    OutY = FMath::FloorToInt(LocalPos.Y / CellSize);
+    OutZ = FMath::FloorToInt(LocalPos.Z / CellSize);
+
+    // Log if we're outside the grid bounds
+    if (OutX < 0 || OutX >= BaseGridSize || OutY < 0 || OutY >= BaseGridSize || OutZ < 0 || OutZ >= BaseGridSize)
+    {
+        WINDSYSTEM_LOG_WARNING(TEXT("GetGridCell: Location out of grid bounds: World(%s), Local(%s), Grid(%d, %d, %d)"),
+            *WorldLocation.ToString(), *LocalPos.ToString(), OutX, OutY, OutZ);
+    }
 }
 
 uint32 FWindSimulationWorker::Run()
