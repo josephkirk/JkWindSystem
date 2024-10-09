@@ -24,19 +24,6 @@ public:
     UPROPERTY(BlueprintAssignable, Category = "Wind Simulation|Debug")
     FOnWindCellUpdated OnWindCellUpdated;
 
-public:
-    UPROPERTY(EditAnywhere, Category = "Wind Simulation|Debug")
-    bool bShowDebugVisualization;
-
-    UPROPERTY(EditAnywhere, Category = "Wind Simulation|Debug")
-    float DebugArrowScale = 1.0f;
-
-    UPROPERTY(EditAnywhere, Category = "Wind Simulation|Debug")
-    float DebugArrowThickness = 1.0f;
-
-    UPROPERTY(EditAnywhere, Category = "Wind Simulation|Debug")
-    FColor DebugArrowColor = FColor::Cyan;
-
 protected:
     virtual void BeginPlay() override;
     //virtual void EndPlay() override;
