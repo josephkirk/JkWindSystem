@@ -11,6 +11,14 @@ void UWindSimulationSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
     Super::Initialize(Collection);
 
+    // Create the WindSimulationComponent
+    if (UWorld* World = GetWorld())
+    {
+        AActor* WindSimActor = World->SpawnActor<AActor>();
+        WindSimComponent = NewObject<UWindSimulationComponent>(WindSimActor);
+        WindSimComponent->RegisterComponent();
+    }
+
     // Set up tick function
     TickHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UWindSimulationSubsystem::Tick), 0.0f);
 }
@@ -19,6 +27,13 @@ void UWindSimulationSubsystem::Deinitialize()
 {
     // Remove tick function
     FTSTicker::GetCoreTicker().RemoveTicker(TickHandle);
+
+    // Clean up WindSimulationComponent
+    if (WindSimComponent)
+    {
+        WindSimComponent->DestroyComponent();
+        WindSimComponent = nullptr;
+    }
 
     Super::Deinitialize();
 }
@@ -39,20 +54,32 @@ bool UWindSimulationSubsystem::Tick(float DeltaTime)
     {
         WindSimComponent->TickComponent(DeltaTime, ELevelTick::LEVELTICK_All, nullptr);
     }
+
+    UpdateWindGenerators(DeltaTime);
+
     return true;
 }
 
-void UWindSimulationSubsystem::SetWindSimulationComponent(UWindSimulationComponent* InWindSimComponent)
+void UWindSimulationSubsystem::AddWindAtLocation(const FVector& Location, const FVector& WindVelocity)
 {
-    WindSimComponent = InWindSimComponent;
+    if (WindSimComponent)
+    {
+        WindSimComponent->AddWindAtLocation(Location, WindVelocity);
+    }
+}
+
+FVector UWindSimulationSubsystem::GetWindVelocityAtLocation(const FVector& WorldLocation) const
+{
+    if (WindSimComponent)
+    {
+        return WindSimComponent->GetWindVelocityAtLocation(WorldLocation);
+    }
+    return FVector::ZeroVector;
 }
 
 void UWindSimulationSubsystem::RegisterWindGenerator(UWindGeneratorComponent* WindGenerator)
 {
-    if (WindGenerator)
-    {
-        WindGenerators.AddUnique(WindGenerator);
-    }
+    WindGenerators.AddUnique(WindGenerator);
 }
 
 void UWindSimulationSubsystem::UnregisterWindGenerator(UWindGeneratorComponent* WindGenerator)
@@ -60,23 +87,14 @@ void UWindSimulationSubsystem::UnregisterWindGenerator(UWindGeneratorComponent* 
     WindGenerators.Remove(WindGenerator);
 }
 
-FVector UWindSimulationSubsystem::GetWindVelocityAtLocation(const FVector& WorldLocation) const
+void UWindSimulationSubsystem::UpdateWindGenerators(float DeltaTime)
 {
-    FVector TotalWind = FVector::ZeroVector;
-    
-    if (WindSimComponent)
-    {
-        TotalWind = WindSimComponent->GetWindVelocityAtLocation(WorldLocation);
-    }
-
-    for (const UWindGeneratorComponent* WindGenerator : WindGenerators)
+    for (UWindGeneratorComponent* WindGenerator : WindGenerators)
     {
         if (WindGenerator && WindGenerator->IsActive())
         {
-            TotalWind += WindGenerator->GetWindVelocityAtLocation(WorldLocation);
+            WindGenerator->UpdateWindSimulation(DeltaTime, this);
         }
     }
-
-    return TotalWind;
 }
 

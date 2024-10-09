@@ -6,6 +6,8 @@
 #include "Components/SplineComponent.h"
 #include "WindSourceComponent.generated.h"
 
+class UWindSimulationSubsystem;
+
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class JK_WINDSYSTEM_API UWindGeneratorComponent : public USceneComponent
 {
@@ -25,12 +27,23 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wind")
     float Radius = 500.0f;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wind")
+    float UpdateFrequency = 0.1f;
+
+    // New function to update wind simulation
+    void UpdateWindSimulation(float DeltaTime, UWindSimulationSubsystem* Subsystem);
+
 protected:
     virtual void BeginPlay() override;
     virtual void EndPlay(EEndPlayReason::Type EndPlayReason) override;
 
     UFUNCTION(BlueprintCallable, Category = "Wind")
     virtual float GetFalloff(float Distance) const;
+
+private:
+    float TimeSinceLastUpdate;
+
+    UWindSimulationSubsystem* GetWindSubsystem() const;
 };
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))

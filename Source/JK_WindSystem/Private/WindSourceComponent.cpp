@@ -5,36 +5,50 @@
 UWindGeneratorComponent::UWindGeneratorComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
+    TimeSinceLastUpdate = 0.0f;
 }
 
 void UWindGeneratorComponent::BeginPlay()
 {
     Super::BeginPlay();
-    if (UWorld* World = GetWorld())
+    if (UWindSimulationSubsystem* Subsystem = GetWindSubsystem())
     {
-        if (UWindSimulationSubsystem* WindSubsystem = World->GetSubsystem<UWindSimulationSubsystem>())
-        {
-            WindSubsystem->RegisterWindGenerator(this);
-        }
+        Subsystem->RegisterWindGenerator(this);
     }
 }
 
 void UWindGeneratorComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-    if (UWorld* World = GetWorld())
+    if (UWindSimulationSubsystem* Subsystem = GetWindSubsystem())
     {
-        if (UWindSimulationSubsystem* WindSubsystem = World->GetSubsystem<UWindSimulationSubsystem>())
-        {
-            WindSubsystem->UnregisterWindGenerator(this);
-        }
+        Subsystem->UnregisterWindGenerator(this);
     }
-
     Super::EndPlay(EndPlayReason);
 }
 
 void UWindGeneratorComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+    // The actual update is now handled by the subsystem
+}
+
+void UWindGeneratorComponent::UpdateWindSimulation(float DeltaTime, UWindSimulationSubsystem* Subsystem)
+{
+    TimeSinceLastUpdate += DeltaTime;
+    if (TimeSinceLastUpdate >= UpdateFrequency)
+    {
+        // Sample points within the wind generator's influence
+        const int32 SampleCount = 10;
+        for (int32 i = 0; i < SampleCount; ++i)
+        {
+            FVector RandomOffset = FMath::VRand() * FMath::RandRange(0.0f, Radius);
+            FVector SampleLocation = GetComponentLocation() + RandomOffset;
+            FVector WindVelocity = GetWindVelocityAtLocation(SampleLocation);
+            
+            Subsystem->AddWindAtLocation(SampleLocation, WindVelocity);
+        }
+        TimeSinceLastUpdate = 0.0f;
+    }
 }
 
 FVector UWindGeneratorComponent::GetWindVelocityAtLocation(const FVector& Location) const
@@ -46,6 +60,15 @@ FVector UWindGeneratorComponent::GetWindVelocityAtLocation(const FVector& Locati
 float UWindGeneratorComponent::GetFalloff(float Distance) const
 {
     return FMath::Clamp(1.0f - (Distance / Radius), 0.0f, 1.0f);
+}
+
+UWindSimulationSubsystem* UWindGeneratorComponent::GetWindSubsystem() const
+{
+    if (UWorld* World = GetWorld())
+    {
+        return World->GetSubsystem<UWindSimulationSubsystem>();
+    }
+    return nullptr;
 }
 
 FVector UPointWindGeneratorComponent::GetWindVelocityAtLocation(const FVector& Location) const

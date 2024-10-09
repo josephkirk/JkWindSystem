@@ -18,6 +18,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
     FVector GetWindVelocityAtLocation(const FVector& Location) const;
 
+    UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
+    void AddWindAtLocation(const FVector& Location, const FVector& WindVelocity);
+
     UPROPERTY(BlueprintAssignable, Category = "Wind Simulation|Debug")
     FOnWindCellUpdated OnWindCellUpdated;
 
@@ -74,4 +77,6 @@ private:
     void Project(TArray<FVector>& VelocityX, TArray<FVector>& VelocityY, TArray<FVector>& VelocityZ, TArray<FVector>& P, TArray<FVector>& Div);
     void Advect(TArray<FVector>& Dst, const TArray<FVector>& Src, const TArray<FVector>& Velocity, float Dt);
     int32 IX(int32 X, int32 Y, int32 Z) const;
+    // function to get the grid cell for a given world location
+    void GetGridCell(const FVector& Location, int32& OutX, int32& OutY, int32& OutZ) const;
 };

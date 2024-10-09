@@ -1,7 +1,6 @@
-// WindSimulationComponent.cpp
 #include "WindSystemComponent.h"
 #include "DrawDebugHelpers.h"
-#include "WindSubsystem.h"
+//#include "WindSubsystem.h"
 
 UWindSimulationComponent::UWindSimulationComponent()
 {
@@ -15,15 +14,6 @@ void UWindSimulationComponent::BeginPlay()
     Super::BeginPlay();
     InitializeGrid();
 
-    // Register with the subsystem
-    if (UWorld* World = GetWorld())
-    {
-        if (UWindSimulationSubsystem* WindSubsystem = World->GetSubsystem<UWindSimulationSubsystem>())
-        {
-            WindSubsystem->SetWindSimulationComponent(this);
-        }
-    }
-
 }
 
 void UWindSimulationComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
@@ -36,6 +26,42 @@ void UWindSimulationComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
         StepSimulation(SimulationTimer);
         SimulationTimer = 0.0f;
     }
+}
+
+void UWindSimulationComponent::AddWindAtLocation(const FVector& Location, const FVector& WindVelocity)
+{
+    int32 X, Y, Z;
+    GetGridCell(Location, X, Y, Z);
+
+    // Add the wind velocity to the current cell
+    VelocityGrid[IX(X, Y, Z)] += WindVelocity;
+
+    // Optionally, distribute some of the wind to neighboring cells for smoother effect
+    float DistributionFactor = 0.1f;
+    for (int32 dz = -1; dz <= 1; dz++)
+    {
+        for (int32 dy = -1; dy <= 1; dy++)
+        {
+            for (int32 dx = -1; dx <= 1; dx++)
+            {
+                if (dx == 0 && dy == 0 && dz == 0) continue;
+                
+                int32 NX = FMath::Clamp(X + dx, 0, GridSizeX - 1);
+                int32 NY = FMath::Clamp(Y + dy, 0, GridSizeY - 1);
+                int32 NZ = FMath::Clamp(Z + dz, 0, GridSizeZ - 1);
+                
+                VelocityGrid[IX(NX, NY, NZ)] += WindVelocity * DistributionFactor;
+            }
+        }
+    }
+}
+
+void UWindSimulationComponent::GetGridCell(const FVector& Location, int32& OutX, int32& OutY, int32& OutZ) const
+{
+    FVector LocalPos = GetOwner()->GetActorTransform().InverseTransformPosition(Location);
+    OutX = FMath::Clamp(FMath::FloorToInt(LocalPos.X / CellSize), 0, GridSizeX - 1);
+    OutY = FMath::Clamp(FMath::FloorToInt(LocalPos.Y / CellSize), 0, GridSizeY - 1);
+    OutZ = FMath::Clamp(FMath::FloorToInt(LocalPos.Z / CellSize), 0, GridSizeZ - 1);
 }
 
 void UWindSimulationComponent::NotifyCellUpdated(int32 X, int32 Y, int32 Z)
@@ -72,13 +98,13 @@ void UWindSimulationComponent::AddSources()
 {
     // Add wind sources here
     // For example, add a constant wind in the X direction
-    for (int32 Z = 0; Z < GridSizeZ; ++Z)
-    {
-        for (int32 Y = 0; Y < GridSizeY; ++Y)
-        {
-            VelocityGrid[IX(0, Y, Z)] += FVector(10.0f, 0.0f, 0.0f);
-        }
-    }
+    // for (int32 Z = 0; Z < GridSizeZ; ++Z)
+    // {
+    //     for (int32 Y = 0; Y < GridSizeY; ++Y)
+    //     {
+    //         VelocityGrid[IX(0, Y, Z)] += FVector(10.0f, 0.0f, 0.0f);
+    //     }
+    // }
 }
 
 void UWindSimulationComponent::Diffuse(TArray<FVector>& Dst, const TArray<FVector>& Src, float Diff, float Dt)

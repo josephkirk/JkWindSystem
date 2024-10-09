@@ -26,20 +26,23 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
     FVector GetWindVelocityAtLocation(const FVector& WorldLocation) const;
 
-    // Set the wind simulation component
-    void SetWindSimulationComponent(UWindSimulationComponent* InWindSimComponent);
+    // Function to add wind from generators
+    UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
+    void AddWindAtLocation(const FVector& Location, const FVector& WindVelocity);
+
+    // Register and unregister wind generators
+    void RegisterWindGenerator(UWindGeneratorComponent* WindGenerator);
+    void UnregisterWindGenerator(UWindGeneratorComponent* WindGenerator);
+
 
 private:
     UPROPERTY()
     UWindSimulationComponent* WindSimComponent;
 
-    FTSTicker::FDelegateHandle TickHandle;
-
-private:
     TArray<UWindGeneratorComponent*> WindGenerators;
 
-public:
-    void RegisterWindGenerator(UWindGeneratorComponent* WindGenerator);
-    void UnregisterWindGenerator(UWindGeneratorComponent* WindGenerator);
+    FTSTicker::FDelegateHandle TickHandle;
+
+    void UpdateWindGenerators(float DeltaTime);
 
 };
