@@ -79,6 +79,9 @@ FVector UPointWindGeneratorComponent::GetWindVelocityAtLocation(const FVector& L
     if (Distance > Radius)
         return FVector::ZeroVector;
 
+    if (FMath::IsNearlyZero(Distance))
+        return FVector::ZeroVector;
+
     Direction /= Distance;  // Normalize
     float StrengthAtDistance = Strength * GetFalloff(Distance);
     return Direction * StrengthAtDistance;
@@ -86,12 +89,13 @@ FVector UPointWindGeneratorComponent::GetWindVelocityAtLocation(const FVector& L
 
 FVector UDirectionalWindGeneratorComponent::GetWindVelocityAtLocation(const FVector& Location) const
 {
-    FVector Direction = GetForwardVector();
     FVector ToLocation = Location - GetComponentLocation();
     float Distance = ToLocation.Size();
 
     if (Distance > Radius)
         return FVector::ZeroVector;
+
+    FVector Direction = GetForwardVector();
 
     if (ShapeType == EWindShapeType::Cone)
     {
@@ -136,7 +140,7 @@ FVector USplineWindGeneratorComponent::GetWindVelocityAtLocation(const FVector& 
     if (ClosestDistance > Radius)
         return FVector::ZeroVector;
 
-    FVector SplineTangent = WindSpline->GetDirectionAtDistanceAlongSpline(SplineInput * WindSpline->GetSplineLength(), ESplineCoordinateSpace::World);
+    FVector SplineTangent = WindSpline->GetTangentAtSplineInputKey(SplineInput, ESplineCoordinateSpace::World).GetSafeNormal();
     float StrengthAtDistance = Strength * GetFalloff(ClosestDistance);
     return SplineTangent * StrengthAtDistance;
 }
