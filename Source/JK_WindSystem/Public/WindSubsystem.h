@@ -29,6 +29,8 @@ public:
     void RegisterWindGenerator(UWindGeneratorComponent* WindGenerator);
     void UnregisterWindGenerator(UWindGeneratorComponent* WindGenerator);
 
+    UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
+    UWindSimulationComponent* GetWindSimComponent() const { return WindSimComponent; }
 private:
     UPROPERTY()
     UWindSimulationComponent* WindSimComponent;

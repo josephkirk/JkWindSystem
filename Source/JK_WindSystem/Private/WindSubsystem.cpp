@@ -1,7 +1,7 @@
 #include "WindSubsystem.h"
 #include "Engine/Engine.h"
 #include "TimerManager.h"
-#include "WindSystemLog.h"
+#include "WindSystemCommon.h"
 
 UWindSimulationSubsystem::UWindSimulationSubsystem()
     : WindSimComponent(nullptr)
