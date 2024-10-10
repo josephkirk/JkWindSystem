@@ -1,7 +1,7 @@
 #include "WindSystemComponent.h"
 #include "Async/ParallelFor.h"
 #include "Math/UnrealMathSSE.h"
-#include "WindSystemLog.h"
+#include "WindSystemCommon.h"
 
 FWindGrid::FWindGrid(int32 Size, float InCellSize) : GridSize(Size), CellSize(InCellSize)
 {
@@ -151,6 +151,41 @@ void UWindSimulationComponent::SimulationStep(float DeltaTime)
     Project(WindGrid, MakeShared<FWindGrid>(WindGrid->GetSize(), WindGrid->GetCellSize()), MakeShared<FWindGrid>(WindGrid->GetSize(), WindGrid->GetCellSize()));
 
     ApplySIMDOperations(WindGrid, DeltaTime);
+
+    // After updating the wind grid, broadcast updates for visualization
+    BroadcastWindUpdates();
+}
+
+void UWindSimulationComponent::BroadcastWindUpdates()
+{
+    if (!IsGridInitialized())
+    {
+        return;
+    }
+
+    int32 Size = WindGrid->GetSize();
+    float GridCellSize = WindGrid->GetCellSize();  // Renamed from CellSize to GridCellSize
+    FVector Origin = GetComponentLocation();
+
+    for (int32 z = 0; z < Size; ++z)
+    {
+        for (int32 y = 0; y < Size; ++y)
+        {
+            for (int32 x = 0; x < Size; ++x)
+            {
+                FVector CellCenter = Origin + FVector(x * GridCellSize, y * GridCellSize, z * GridCellSize);
+                FVector WindVelocity = WindGrid->GetCell(x, y, z);
+
+                // Only broadcast if the wind velocity is significant
+                if (WindVelocity.SizeSquared() > 0.01f)
+                {
+                    OnWindCellUpdated.Broadcast(CellCenter, WindVelocity, GridCellSize);
+                    WINDSYSTEM_LOG_VERBOSE(TEXT("Wind cell updated: Center=%s, Velocity=%s"),
+                        *CellCenter.ToString(), *WindVelocity.ToString());
+                }
+            }
+        }
+    }
 }
 
 void UWindSimulationComponent::Diffuse(TSharedPtr<FWindGrid> Dst, const TSharedPtr<FWindGrid> Src, float Diff, float Dt)
@@ -406,8 +441,14 @@ void UWindSimulationComponent::AddWindAtLocation(const FVector& Location, const 
         return;
     }
 
+    if (!IsVectorFinite(WindVelocity))
+    {
+        WINDSYSTEM_LOG_ERROR(TEXT("Invalid wind velocity provided: %s"), *WindVelocity.ToString());
+        return;
+    }
+
     FVector LocalPos = GetComponentTransform().InverseTransformPosition(Location);
-    FVector GridPos = LocalPos / WindGrid->GetCellSize();
+    FVector GridPos = LocalPos / CellSize;
 
     int32 X = FMath::FloorToInt(GridPos.X);
     int32 Y = FMath::FloorToInt(GridPos.Y);
@@ -418,10 +459,21 @@ void UWindSimulationComponent::AddWindAtLocation(const FVector& Location, const 
     {
         FVector CurrentVelocity = WindGrid->GetCell(X, Y, Z);
         FVector NewVelocity = CurrentVelocity + WindVelocity;
+
+        // Clamp the new velocity to prevent extreme values
+        const float MaxAllowedMagnitude = 1000000.0f; // Adjust this value as needed
+        if (NewVelocity.SizeSquared() > FMath::Square(MaxAllowedMagnitude))
+        {
+            NewVelocity = NewVelocity.GetSafeNormal() * MaxAllowedMagnitude;
+            WINDSYSTEM_LOG_WARNING(TEXT("Wind velocity clamped at location: %s"), *Location.ToString());
+        }
+
         WindGrid->SetCell(X, Y, Z, NewVelocity);
 
         // Notify listeners about the updated cell
         OnWindCellUpdated.Broadcast(Location, NewVelocity, WindGrid->GetCellSize());
+        WINDSYSTEM_LOG_VERBOSE(TEXT("Wind added at location: Pos=%s, NewVelocity=%s"), 
+            *Location.ToString(), *NewVelocity.ToString());
     }
     else
     {

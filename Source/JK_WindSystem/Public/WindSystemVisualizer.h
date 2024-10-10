@@ -1,5 +1,3 @@
-// WindSystemVisualizer.h
-
 #pragma once
 
 #include "CoreMinimal.h"
@@ -10,12 +8,22 @@
 
 class UWindSimulationSubsystem;
 
-UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
+USTRUCT()
+struct FWindCellUpdate
+{
+    GENERATED_BODY()
+
+    FVector CellCenter;
+    FVector WindVelocity;
+    float CellSize;
+};
+
+UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
 class JK_WINDSYSTEM_API UWindDebugVisualizer : public UActorComponent
 {
     GENERATED_BODY()
 
-public:    
+public:
     UWindDebugVisualizer();
 
     virtual void BeginPlay() override;
@@ -56,12 +64,16 @@ private:
     void DrawDebugArrow(const UWorld* World, const FVector& Start, const FVector& End, const FVector& Velocity);
     void DrawDebugVelocityText(const UWorld* World, const FVector& Location, const FVector& Velocity);
     void DrawDebugAdaptiveGrid(const UWorld* World);
+    void ProcessWindUpdate(UWorld* World, const FWindCellUpdate& Update);
 
     UPROPERTY()
     UWindSimulationComponent* WindSimComponent;
 
     UWindSimulationSubsystem* GetWindSubsystem() const;
+
+    TArray<FWindCellUpdate> WindUpdates;
 };
+
 
 
 UCLASS()
@@ -110,4 +122,5 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Wind Debug")
     void UpdateVisualizerSettings();
+
 };

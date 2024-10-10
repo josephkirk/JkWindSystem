@@ -96,7 +96,7 @@ private:
 
     UPROPERTY()
     float CellSize;
-
+    void BroadcastWindUpdates();
     void InitializeGrid();
     bool IsGridInitialized() const { return WindGrid != nullptr; }
     void Diffuse(TSharedPtr<FWindGrid> Dst, const TSharedPtr<FWindGrid> Src, float Diff, float Dt);

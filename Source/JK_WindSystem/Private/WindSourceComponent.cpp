@@ -1,6 +1,6 @@
 #include "WindSourceComponent.h"
 #include "WindSubsystem.h"
-#include "WindSystemLog.h"
+#include "WindSystemCommon.h"
 
 UWindGeneratorComponent::UWindGeneratorComponent()
 {
