@@ -96,6 +96,9 @@ private:
 
     UPROPERTY()
     float CellSize;
+
+    bool bIsBroadcasting = false;
+
     void BroadcastWindUpdates();
     void InitializeGrid();
     bool IsGridInitialized() const { return WindGrid != nullptr; }
