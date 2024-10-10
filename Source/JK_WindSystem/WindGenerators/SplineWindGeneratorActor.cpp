@@ -56,8 +56,13 @@ void ASplineWindGeneratorActor::UpdateVisualization()
         FVector Location = Spline->GetLocationAtDistanceAlongSpline(Distance, ESplineCoordinateSpace::World);
         FVector Tangent = Spline->GetTangentAtDistanceAlongSpline(Distance, ESplineCoordinateSpace::World);
 
+        // Calculate rotation based on tangent
+        FRotator TangentRotation = Tangent.Rotation();
+        FVector UpVector = TangentRotation.RotateVector(FVector::UpVector);
+        FVector RightVector = TangentRotation.RotateVector(FVector::RightVector);
+
         // Draw cross-section of wind effect
-        DrawDebugCircle(GetWorld(), Location, Radius, 16, FColor::Cyan, false, -1.0f, 0, 2.0f, Tangent.GetSafeNormal().Rotation().GetUnitAxis(EAxis::Z), Tangent.GetSafeNormal().Rotation().GetUnitAxis(EAxis::Y));
+        DrawDebugCircle(GetWorld(), Location, Radius, 16, FColor::Cyan, false, -1.0f, 0, 2.0f, UpVector, RightVector);
 
         // Draw wind direction
         DrawDebugLine(GetWorld(), Location, Location + Tangent.GetSafeNormal() * Radius * 0.8f, FColor::Blue, false, -1.0f, 0, 2.0f);
