@@ -37,15 +37,20 @@ void UWindGeneratorComponent::UpdateWindSimulation(float DeltaTime, UWindSimulat
     TimeSinceLastUpdate += DeltaTime;
     if (TimeSinceLastUpdate >= UpdateFrequency)
     {
-        const int32 SampleCount = 10;
+        const int32 SampleCount = 200; // Increased sample count for more consistent results
         for (int32 i = 0; i < SampleCount; ++i)
         {
-            FVector RandomOffset = FMath::VRand() * FMath::RandRange(0.0f, Radius);
-            FVector SampleLocation = GetComponentLocation() + RandomOffset;
+            float RandomRadius = FMath::Sqrt(FMath::FRand()) * Radius; // This distribution favors samples near the edge
+            FVector RandomDirection = FMath::VRand();
+            FVector SampleLocation = GetComponentLocation() + RandomDirection * RandomRadius;
             FVector WindVelocity = GetWindVelocityAtLocation(SampleLocation);
 
-            WINDSYSTEM_LOG(Verbose, TEXT("WindGeneratorComponent: Adding wind at location %s with velocity %s"), *SampleLocation.ToString(), *WindVelocity.ToString());
-            Subsystem->AddWindAtLocation(SampleLocation, WindVelocity);
+            // Ensure the wind velocity is not zero
+            if (!WindVelocity.IsNearlyZero())
+            {
+                WINDSYSTEM_LOG(Verbose, TEXT("%s: Adding wind at location %s with velocity %s"), *GetName(), *SampleLocation.ToString(), *WindVelocity.ToString());
+                Subsystem->AddWindAtLocation(SampleLocation, WindVelocity);
+            }
         }
         TimeSinceLastUpdate = 0.0f;
     }
@@ -59,7 +64,7 @@ FVector UWindGeneratorComponent::GetWindVelocityAtLocation(const FVector& Locati
 
 float UWindGeneratorComponent::GetFalloff(float Distance) const
 {
-    return FMath::Clamp(1.0f - (Distance / Radius), 0.0f, 1.0f);
+    return FMath::Max(0.1f, 1.0f - (Distance / Radius));
 }
 
 UWindSimulationSubsystem* UWindGeneratorComponent::GetWindSubsystem() const
@@ -73,13 +78,13 @@ UWindSimulationSubsystem* UWindGeneratorComponent::GetWindSubsystem() const
 
 FVector UPointWindGeneratorComponent::GetWindVelocityAtLocation(const FVector& Location) const
 {
-    FVector Direction = GetComponentLocation() - Location;  // Changed to point towards center
+    FVector Direction = GetComponentLocation() - Location; // Changed back to flow towards center
     float Distance = Direction.Size();
-
+    
     if (Distance > Radius)
         return FVector::ZeroVector;
 
-    if (FMath::IsNearlyZero(Distance))
+    if (FMath::IsNearlyZero(Distance, 1e-4f))
         return FVector::ZeroVector;
 
     Direction /= Distance;  // Normalize
@@ -121,7 +126,7 @@ FVector UVortexWindGeneratorComponent::GetWindVelocityAtLocation(const FVector& 
 
     float StrengthAtDistance = Strength * GetFalloff(Distance);
     float TangentialStrengthAtDistance = TangentialStrength * GetFalloff(Distance);
-
+    
     return (Tangent * TangentialStrengthAtDistance + Radial * StrengthAtDistance);
 }
 

@@ -31,7 +31,7 @@ public:
     float UpdateFrequency = 0.1f;
 
     // New function to update wind simulation
-    void UpdateWindSimulation(float DeltaTime, UWindSimulationSubsystem* Subsystem);
+    virtual void UpdateWindSimulation(float DeltaTime, UWindSimulationSubsystem* Subsystem);
 
 protected:
     virtual void BeginPlay() override;
@@ -40,7 +40,6 @@ protected:
     UFUNCTION(BlueprintCallable, Category = "Wind")
     virtual float GetFalloff(float Distance) const;
 
-private:
     float TimeSinceLastUpdate;
 
     UWindSimulationSubsystem* GetWindSubsystem() const;
