@@ -1,4 +1,4 @@
-#include "WindGenerators/PointWindGeneratorActor.h"
+#include "PointWindGeneratorActor.h"
 #include "Components/ArrowComponent.h"
 #include "DrawDebugHelpers.h"
 

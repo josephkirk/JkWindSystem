@@ -1,4 +1,4 @@
-#include "WindGenerators/VortexWindGeneratorActor.h"
+#include "VortexWindGeneratorActor.h"
 #include "Components/StaticMeshComponent.h"
 #include "DrawDebugHelpers.h"
 #include "UObject/ConstructorHelpers.h"

@@ -1,4 +1,4 @@
-#include "WindGenerators/SplineWindGeneratorActor.h"
+#include "SplineWindGeneratorActor.h"
 #include "Components/SplineComponent.h"
 #include "DrawDebugHelpers.h"
 
