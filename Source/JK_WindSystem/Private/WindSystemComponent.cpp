@@ -158,13 +158,15 @@ void UWindSimulationComponent::SimulationStep(float DeltaTime)
 
 void UWindSimulationComponent::BroadcastWindUpdates()
 {
-    if (!IsGridInitialized())
+    if (!IsGridInitialized() || bIsBroadcasting)
     {
         return;
     }
 
+    bIsBroadcasting = true;
+
     int32 Size = WindGrid->GetSize();
-    float GridCellSize = WindGrid->GetCellSize();  // Renamed from CellSize to GridCellSize
+    float GridCellSize = WindGrid->GetCellSize();
     FVector Origin = GetComponentLocation();
 
     for (int32 z = 0; z < Size; ++z)
@@ -186,6 +188,8 @@ void UWindSimulationComponent::BroadcastWindUpdates()
             }
         }
     }
+
+    bIsBroadcasting = false;
 }
 
 void UWindSimulationComponent::Diffuse(TSharedPtr<FWindGrid> Dst, const TSharedPtr<FWindGrid> Src, float Diff, float Dt)
@@ -470,8 +474,6 @@ void UWindSimulationComponent::AddWindAtLocation(const FVector& Location, const 
 
         WindGrid->SetCell(X, Y, Z, NewVelocity);
 
-        // Notify listeners about the updated cell
-        OnWindCellUpdated.Broadcast(Location, NewVelocity, WindGrid->GetCellSize());
         WINDSYSTEM_LOG_VERBOSE(TEXT("Wind added at location: Pos=%s, NewVelocity=%s"), 
             *Location.ToString(), *NewVelocity.ToString());
     }
