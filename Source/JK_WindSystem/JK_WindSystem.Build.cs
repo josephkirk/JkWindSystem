@@ -17,6 +17,7 @@ public class JK_WindSystem : ModuleRules
 		
 		PrivateIncludePaths.AddRange(
 			new string[] {
+				"JK_WindSystem/WindGenerators"
 				// ... add other private include paths required here ...
 			}
 			);
