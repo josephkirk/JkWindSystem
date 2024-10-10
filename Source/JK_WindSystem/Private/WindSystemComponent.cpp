@@ -493,10 +493,11 @@ void UWindSimulationComponent::AddWindAtLocation(const FVector& Location, const 
     if (X >= 0 && X < Size && Y >= 0 && Y < Size && Z >= 0 && Z < Size)
     {
         FVector CurrentVelocity = WindGrid->GetCell(X, Y, Z);
-        FVector NewVelocity = CurrentVelocity + WindVelocity;
-        if (Velocity.ContainsNaN()) {
-            Velocity = FVector::ZeroVector;
+        if (CurrentVelocity.ContainsNaN()) {
+            CurrentVelocity = FVector::ZeroVector;
         }
+        FVector NewVelocity = CurrentVelocity + WindVelocity;
+        
         // Clamp the new velocity to prevent extreme values
         if (NewVelocity.SizeSquared() > FMath::Square(GetMaxAllowedWindVelocity()))
         {
