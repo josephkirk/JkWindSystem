@@ -6,7 +6,7 @@
 #include "Components/BillboardComponent.h"
 #include "SplineWindGeneratorActor.generated.h"
 
-UCLASS(BlueprintType, Placeable, Meta=(DisplayName="Directional Wind Generator", Category="Wind System"))
+UCLASS(BlueprintType, Placeable, Meta=(DisplayName="Spline Wind Generator", Category="Wind System"))
 class JK_WINDSYSTEM_API ASplineWindGeneratorActor : public AActor
 {
     GENERATED_BODY()

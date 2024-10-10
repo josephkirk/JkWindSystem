@@ -6,6 +6,7 @@
 #include "HAL/ThreadSafeBool.h"
 #include "Containers/Array.h"
 #include "Templates/SharedPointer.h"
+#include "WindSystemSettings.h"
 #include "WindSystemComponent.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnWindCellUpdated, const FVector&, CellCenter, const FVector&, WindVelocity, float, CellSize);
@@ -83,6 +84,9 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
     void StartSimulation();
 
+    UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
+    float GetMaxAllowedWindVelocity() const;
+
 private:
     TSharedPtr<FWindGrid> WindGrid;
     float Viscosity;
@@ -90,6 +94,8 @@ private:
 
     FWindSimulationWorker* SimulationWorker;
     FRunnableThread* SimulationThread;
+
+    const UWindSystemSettings* GetSettings() const;
     
     UPROPERTY()
     int32 BaseGridSize;

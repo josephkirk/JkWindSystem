@@ -4,6 +4,8 @@
 #include "Components/ActorComponent.h"
 #include "WindSystemComponent.h"
 #include "DrawDebugHelpers.h"
+#include "HAL/ThreadSafeBool.h"
+#include "Containers/Queue.h"
 #include "WindSystemVisualizer.generated.h"
 
 class UWindSimulationSubsystem;
@@ -71,7 +73,14 @@ private:
 
     UWindSimulationSubsystem* GetWindSubsystem() const;
 
-    TArray<FWindCellUpdate> WindUpdates;
+    // Thread-safe queue for wind updates
+    TQueue<FWindCellUpdate, EQueueMode::Mpsc> WindUpdates;
+
+    // Critical section for thread-safe access to shared data
+    FCriticalSection DataLock;
+
+    // Thread-safe flag to control visualization
+    FThreadSafeBool bIsVisualizationActive;
 };
 
 

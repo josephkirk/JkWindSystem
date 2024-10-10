@@ -38,6 +38,7 @@ UWindSimulationComponent::UWindSimulationComponent()
     CellSize = 100.0f; // Default value
     Viscosity = 0.1f;
     SimulationFrequency = 60.0f;
+    bAutoActivate = true;
 }
 
 void UWindSimulationComponent::BeginPlay()
@@ -67,6 +68,16 @@ void UWindSimulationComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
     }
 
     Super::EndPlay(EndPlayReason);
+}
+
+float UWindSimulationComponent::GetMaxAllowedWindVelocity() const
+{
+    return GetSettings()->MaxAllowedWindVelocity;
+}
+
+const UWindSystemSettings* UWindSimulationComponent::GetSettings() const
+{
+    return GetDefault<UWindSystemSettings>();
 }
 
 int32 UWindSimulationComponent::GetBaseGridSize() const
@@ -151,6 +162,23 @@ void UWindSimulationComponent::SimulationStep(float DeltaTime)
     Project(WindGrid, MakeShared<FWindGrid>(WindGrid->GetSize(), WindGrid->GetCellSize()), MakeShared<FWindGrid>(WindGrid->GetSize(), WindGrid->GetCellSize()));
 
     ApplySIMDOperations(WindGrid, DeltaTime);
+
+    // After updating wind velocities
+    for (int32 i = 0; i < WindGrid->GetSize(); ++i)
+    {
+        for (int32 j = 0; j < WindGrid->GetSize(); ++j)
+        {
+            for (int32 k = 0; k < WindGrid->GetSize(); ++k)
+            {
+                FVector& Velocity = WindGrid->GetCell(i, j, k);
+                if (IsVectorFinite(Velocity) || Velocity.SizeSquared() > FMath::Square(GetMaxAllowedWindVelocity()))
+                {
+                    Velocity = Velocity.GetClampedToMaxSize(GetMaxAllowedWindVelocity());
+                    //WINDSYSTEM_LOG_WARNING(TEXT("Wind velocity clamped at cell (%d, %d, %d)"), i, j, k);
+                }
+            }
+        }
+    }
 
     // After updating the wind grid, broadcast updates for visualization
     BroadcastWindUpdates();
@@ -465,11 +493,10 @@ void UWindSimulationComponent::AddWindAtLocation(const FVector& Location, const 
         FVector NewVelocity = CurrentVelocity + WindVelocity;
 
         // Clamp the new velocity to prevent extreme values
-        const float MaxAllowedMagnitude = 1000000.0f; // Adjust this value as needed
-        if (NewVelocity.SizeSquared() > FMath::Square(MaxAllowedMagnitude))
+        if (NewVelocity.SizeSquared() > FMath::Square(GetMaxAllowedWindVelocity()))
         {
-            NewVelocity = NewVelocity.GetSafeNormal() * MaxAllowedMagnitude;
-            WINDSYSTEM_LOG_WARNING(TEXT("Wind velocity clamped at location: %s"), *Location.ToString());
+            NewVelocity = NewVelocity.GetSafeNormal() * GetMaxAllowedWindVelocity();
+            //WINDSYSTEM_LOG_WARNING(TEXT("Wind velocity clamped at location: %s"), *Location.ToString());
         }
 
         WindGrid->SetCell(X, Y, Z, NewVelocity);

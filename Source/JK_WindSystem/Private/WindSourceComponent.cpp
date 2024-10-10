@@ -6,6 +6,7 @@ UWindGeneratorComponent::UWindGeneratorComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
     TimeSinceLastUpdate = 0.0f;
+    bAutoActivate = true;
 }
 
 void UWindGeneratorComponent::BeginPlay()

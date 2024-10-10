@@ -6,6 +6,8 @@
 UWindDebugVisualizer::UWindDebugVisualizer()
 {
     PrimaryComponentTick.bCanEverTick = true;
+    bIsVisualizationActive = true;
+    bAutoActivate = true;
 }
 
 void UWindDebugVisualizer::BeginPlay()
@@ -40,11 +42,18 @@ void UWindDebugVisualizer::EndPlay(const EEndPlayReason::Type EndPlayReason)
     }
 
     Super::EndPlay(EndPlayReason);
+    
+    bIsVisualizationActive = false;
 }
 
 void UWindDebugVisualizer::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+    if (!bIsVisualizationActive)
+    {
+        return;
+    }
 
     UWorld* World = GetWorld();
     if (!World)
@@ -53,11 +62,11 @@ void UWindDebugVisualizer::TickComponent(float DeltaTime, ELevelTick TickType, F
         return;
     }
 
-    for (const FWindCellUpdate& Update : WindUpdates)
+    FWindCellUpdate Update;
+    while (WindUpdates.Dequeue(Update))
     {
         ProcessWindUpdate(World, Update);
     }
-    WindUpdates.Empty();
 
     if (bDrawAdaptiveGrid)
     {
@@ -71,12 +80,17 @@ void UWindDebugVisualizer::TickComponent(float DeltaTime, ELevelTick TickType, F
 
 void UWindDebugVisualizer::OnWindCellUpdated(const FVector& CellCenter, const FVector& WindVelocity, float CellSize)
 {
+    if (!bIsVisualizationActive)
+    {
+        return;
+    }
+
     FWindCellUpdate NewUpdate;
     NewUpdate.CellCenter = CellCenter;
     NewUpdate.WindVelocity = WindVelocity;
     NewUpdate.CellSize = CellSize;
 
-    WindUpdates.Add(NewUpdate);
+    WindUpdates.Enqueue(NewUpdate);
 }
 
 void UWindDebugVisualizer::ProcessWindUpdate(UWorld* World, const FWindCellUpdate& Update)
@@ -94,7 +108,7 @@ void UWindDebugVisualizer::ProcessWindUpdate(UWorld* World, const FWindCellUpdat
     const float MaxAllowedMagnitude = 1000000.0f; // Adjust this value as needed
     if (VelocityMagnitude > MaxAllowedMagnitude)
     {
-        WINDSYSTEM_LOG_WARNING(TEXT("Wind velocity magnitude exceeds maximum allowed value. Clamping."));
+        //WINDSYSTEM_LOG_WARNING(TEXT("Wind velocity magnitude exceeds maximum allowed value. Clamping."));
         FVector ClampedVelocity = Update.WindVelocity.GetSafeNormal() * MaxAllowedMagnitude;
         VelocityMagnitude = MaxAllowedMagnitude;
         
