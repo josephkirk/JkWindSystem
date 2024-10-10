@@ -176,6 +176,9 @@ void UWindSimulationComponent::SimulationStep(float DeltaTime)
                     Velocity = Velocity.GetClampedToMaxSize(GetMaxAllowedWindVelocity());
                     //WINDSYSTEM_LOG_WARNING(TEXT("Wind velocity clamped at cell (%d, %d, %d)"), i, j, k);
                 }
+                if (Velocity.ContainsNaN()) {
+                    Velocity = FVector::ZeroVector;
+                }
             }
         }
     }
@@ -491,7 +494,9 @@ void UWindSimulationComponent::AddWindAtLocation(const FVector& Location, const 
     {
         FVector CurrentVelocity = WindGrid->GetCell(X, Y, Z);
         FVector NewVelocity = CurrentVelocity + WindVelocity;
-
+        if (Velocity.ContainsNaN()) {
+            Velocity = FVector::ZeroVector;
+        }
         // Clamp the new velocity to prevent extreme values
         if (NewVelocity.SizeSquared() > FMath::Square(GetMaxAllowedWindVelocity()))
         {
