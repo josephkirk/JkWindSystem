@@ -73,10 +73,10 @@ public:
     FOnWindCellUpdated OnWindCellUpdated;
 
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
-    int32 GetBaseGridSize() const;
+    int32 GetGridSize() const { return GridSize; }
 
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
-    float GetCellSize() const;
+    float GetCellSize() const { return CellSize; }
 
     void SimulationStep(float DeltaTime);
 
@@ -99,13 +99,9 @@ private:
     FRunnableThread* SimulationThread;
 
     mutable FCriticalSection SimulationLock;
-    // Helper method to safely lock the critical section
-    void LockSimulation() const;
-    // Helper method to safely unlock the critical section
-    void UnlockSimulation() const;
 
     UPROPERTY()
-    int32 BaseGridSize;
+    int32 GridSize;
 
     UPROPERTY()
     float CellSize;

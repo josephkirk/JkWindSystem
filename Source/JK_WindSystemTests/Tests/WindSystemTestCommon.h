@@ -8,6 +8,8 @@
 #include "WindSystemComponent.h"
 #include "WindSourceComponent.h"
 #include "WindSubsystem.h"
+#include "WindSystemSettings.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 // Utility function to create a test world
 inline UWorld* CreateTestWorld()

@@ -36,10 +36,10 @@ FORCEINLINE bool FWindGrid::IsValidIndex(int32 X, int32 Y, int32 Z) const
 UWindSimulationComponent::UWindSimulationComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
-    BaseGridSize = 32; // Default value
-    CellSize = 100.0f; // Default value
-    Viscosity = 0.1f;
-    SimulationFrequency = 60.0f;
+    GridSize = GetSettings()->GridSize; // Default value
+    CellSize = GetSettings()->CellSize; // Default value
+    Viscosity = GetSettings()->Viscosity;
+    SimulationFrequency = GetSettings()->SimulationFrequency;
     bAutoActivate = true;
 
 }
@@ -83,16 +83,6 @@ const UWindSystemSettings* UWindSimulationComponent::GetSettings() const
     return GetDefault<UWindSystemSettings>();
 }
 
-int32 UWindSimulationComponent::GetBaseGridSize() const
-{
-    return BaseGridSize;
-}
-
-float UWindSimulationComponent::GetCellSize() const
-{
-    return CellSize;
-}
-
 void UWindSimulationComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
@@ -107,11 +97,11 @@ void UWindSimulationComponent::InitializeGrid()
         return;
     }
 
-    WindGrid = MakeShared<FWindGrid>(BaseGridSize, CellSize);
-    TempGrid = MakeShared<FWindGrid>(BaseGridSize, CellSize);
+    WindGrid = MakeShared<FWindGrid>(GridSize, CellSize);
+    TempGrid = MakeShared<FWindGrid>(GridSize, CellSize);
 
     // Initialize with zero values (already done in FWindGrid constructor)
-    WINDSYSTEM_LOG(Log, TEXT("Wind Simulation Grid Initialized: %d cells"), BaseGridSize * BaseGridSize * BaseGridSize);
+    WINDSYSTEM_LOG(Log, TEXT("Wind Simulation Grid Initialized: %d cells"), GridSize * GridSize * GridSize);
 }
 
 void UWindSimulationComponent::InitializeForTesting()

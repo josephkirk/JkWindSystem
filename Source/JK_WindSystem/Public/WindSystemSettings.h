@@ -14,4 +14,16 @@ public:
 
     UPROPERTY(config, EditAnywhere, Category = "Wind Simulation", meta = (ClampMin = "1.0"))
     float MaxAllowedWindVelocity;
+
+    UPROPERTY(config, EditAnywhere, Category = "Wind Simulation", meta = (ClampMin = "1.0"))
+    float GridSize;
+
+    UPROPERTY(config, EditAnywhere, Category = "Wind Simulation", meta = (ClampMin = "1.0"))
+    float CellSize;
+
+    UPROPERTY(config, EditAnywhere, Category = "Wind Simulation", meta = (ClampMin = "1.0"))
+    float Viscosity;
+
+    UPROPERTY(config, EditAnywhere, Category = "Wind Simulation", meta = (ClampMin = "1.0"))
+    float SimulationFrequency;
 };

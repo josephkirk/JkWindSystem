@@ -14,7 +14,7 @@ bool FWindSystemComponentInitializationTest::RunTest(const FString& Parameters)
 
     // Test initialization
     TestTrue("WindComponent is valid", IsValid(WindComponent));
-    TestTrue("BaseGridSize is set", WindComponent->GetBaseGridSize() > 0);
+    TestTrue("GridSize is set", WindComponent->GetGridSize() > 0);
     TestTrue("CellSize is set", WindComponent->GetCellSize() > 0.0f);
     TestTrue("SimulationFrequency is set", WindComponent->GetSimulationFrequency() > 0.0f);
 

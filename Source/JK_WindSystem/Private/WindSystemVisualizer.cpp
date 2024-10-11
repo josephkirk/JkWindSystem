@@ -185,7 +185,7 @@ void UWindDebugVisualizer::DrawDebugAdaptiveGrid(const UWorld* World)
 
     FVector Origin = WindSimComponent->GetComponentLocation();
     float CellSize = WindSimComponent->GetCellSize();
-    int32 GridSize = WindSimComponent->GetBaseGridSize();
+    int32 GridSize = WindSimComponent->GetGridSize();
     float TotalSize = CellSize * GridSize;
 
     WINDSYSTEM_LOG_VERBOSE(TEXT("Drawing adaptive grid: Origin=%s, CellSize=%f, GridSize=%d, TotalSize=%f"),
