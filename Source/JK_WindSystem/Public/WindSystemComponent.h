@@ -4,6 +4,7 @@
 #include "Components/SceneComponent.h"
 #include "HAL/Runnable.h"
 #include "HAL/ThreadSafeBool.h"
+#include "HAL/CriticalSection.h"
 #include "Containers/Array.h"
 #include "Templates/SharedPointer.h"
 #include "WindSystemSettings.h"
@@ -14,16 +15,16 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnWindCellUpdated, const FVector
 class FWindGrid
 {
 public:
-    FWindGrid(int32 Size, float CellSize);
+    FWindGrid(int32 Size, float InCellSize);
 
-    FVector& GetCell(int32 X, int32 Y, int32 Z);
-    const FVector& GetCell(int32 X, int32 Y, int32 Z) const;
+    FVector GetCell(int32 X, int32 Y, int32 Z) const;
     void SetCell(int32 X, int32 Y, int32 Z, const FVector& Value);
 
     int32 GetSize() const { return GridSize; }
     float GetCellSize() const { return CellSize; }
 
     TArray<FVector>& GetGridData() { return Grid; }
+    // Add a const version
     const TArray<FVector>& GetGridData() const { return Grid; }
 
 private:
@@ -32,6 +33,7 @@ private:
     float CellSize;
 
     int32 GetIndex(int32 X, int32 Y, int32 Z) const;
+    bool IsValidIndex(int32 X, int32 Y, int32 Z) const;
 };
 
 class FWindSimulationWorker : public FRunnable
@@ -81,7 +83,7 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation|Testing")
     void InitializeForTesting();
 
-    UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
+    UFUNCTION(BlueprintImplementableEvent, Category = "Wind Simulation")
     void StartSimulation();
 
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
@@ -89,14 +91,19 @@ public:
 
 private:
     TSharedPtr<FWindGrid> WindGrid;
+    TSharedPtr<FWindGrid> TempGrid;
     float Viscosity;
     float SimulationFrequency;
 
     FWindSimulationWorker* SimulationWorker;
     FRunnableThread* SimulationThread;
 
-    const UWindSystemSettings* GetSettings() const;
-    
+    mutable FCriticalSection SimulationLock;
+    // Helper method to safely lock the critical section
+    void LockSimulation() const;
+    // Helper method to safely unlock the critical section
+    void UnlockSimulation() const;
+
     UPROPERTY()
     int32 BaseGridSize;
 
@@ -105,6 +112,8 @@ private:
 
     bool bIsBroadcasting = false;
 
+    const UWindSystemSettings* GetSettings() const;
+    void SwapGrids();
     void BroadcastWindUpdates();
     void InitializeGrid();
     bool IsGridInitialized() const { return WindGrid != nullptr; }

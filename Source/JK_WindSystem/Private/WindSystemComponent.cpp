@@ -2,33 +2,35 @@
 #include "Async/ParallelFor.h"
 #include "Math/UnrealMathSSE.h"
 #include "WindSystemCommon.h"
+#include "Misc/ScopeLock.h"
 
-FWindGrid::FWindGrid(int32 Size, float InCellSize) : GridSize(Size), CellSize(InCellSize)
+FWindGrid::FWindGrid(int32 Size, float InCellSize)
+    : GridSize(Size), CellSize(InCellSize)
 {
-    Grid.SetNum(Size * Size * Size);
+    Grid.SetNumZeroed(Size * Size * Size);
 }
 
-FVector& FWindGrid::GetCell(int32 X, int32 Y, int32 Z)
+FORCEINLINE FVector FWindGrid::GetCell(int32 X, int32 Y, int32 Z) const
 {
-    return Grid[GetIndex(X, Y, Z)];
+    return IsValidIndex(X, Y, Z) ? Grid[GetIndex(X, Y, Z)] : FVector::ZeroVector;
 }
 
-const FVector& FWindGrid::GetCell(int32 X, int32 Y, int32 Z) const
+FORCEINLINE void FWindGrid::SetCell(int32 X, int32 Y, int32 Z, const FVector& Value)
 {
-    return Grid[GetIndex(X, Y, Z)];
+    if (IsValidIndex(X, Y, Z))
+    {
+        Grid[GetIndex(X, Y, Z)] = Value;
+    }
 }
 
-void FWindGrid::SetCell(int32 X, int32 Y, int32 Z, const FVector& Value)
+FORCEINLINE int32 FWindGrid::GetIndex(int32 X, int32 Y, int32 Z) const
 {
-    Grid[GetIndex(X, Y, Z)] = Value;
-}
-
-int32 FWindGrid::GetIndex(int32 X, int32 Y, int32 Z) const
-{
-    X = FMath::Clamp(X, 0, GridSize - 1);
-    Y = FMath::Clamp(Y, 0, GridSize - 1);
-    Z = FMath::Clamp(Z, 0, GridSize - 1);
     return X + Y * GridSize + Z * GridSize * GridSize;
+}
+
+FORCEINLINE bool FWindGrid::IsValidIndex(int32 X, int32 Y, int32 Z) const
+{
+    return X >= 0 && X < GridSize && Y >= 0 && Y < GridSize && Z >= 0 && Z < GridSize;
 }
 
 UWindSimulationComponent::UWindSimulationComponent()
@@ -39,6 +41,7 @@ UWindSimulationComponent::UWindSimulationComponent()
     Viscosity = 0.1f;
     SimulationFrequency = 60.0f;
     bAutoActivate = true;
+
 }
 
 void UWindSimulationComponent::BeginPlay()
@@ -105,25 +108,10 @@ void UWindSimulationComponent::InitializeGrid()
     }
 
     WindGrid = MakeShared<FWindGrid>(BaseGridSize, CellSize);
+    TempGrid = MakeShared<FWindGrid>(BaseGridSize, CellSize);
 
-    // Initialize with small, non-zero random values
-    for (int32 i = 0; i < BaseGridSize; ++i)
-    {
-        for (int32 j = 0; j < BaseGridSize; ++j)
-        {
-            for (int32 k = 0; k < BaseGridSize; ++k)
-            {
-                FVector RandomWind(
-                    FMath::RandRange(-0.1f, 0.1f),
-                    FMath::RandRange(-0.1f, 0.1f),
-                    FMath::RandRange(-0.1f, 0.1f)
-                );
-                WindGrid->SetCell(i, j, k, RandomWind);
-            }
-        }
-    }
-
-    WINDSYSTEM_LOG(Log, TEXT("Wind Simulation Grid Initialized: %d cells with small random initial wind"), BaseGridSize * BaseGridSize * BaseGridSize);
+    // Initialize with zero values (already done in FWindGrid constructor)
+    WINDSYSTEM_LOG(Log, TEXT("Wind Simulation Grid Initialized: %d cells"), BaseGridSize * BaseGridSize * BaseGridSize);
 }
 
 void UWindSimulationComponent::InitializeForTesting()
@@ -139,23 +127,22 @@ void UWindSimulationComponent::InitializeForTesting()
     WINDSYSTEM_LOG(Log, TEXT("Wind Simulation Component initialized for testing"));
 }
 
-void UWindSimulationComponent::StartSimulation()
+void UWindSimulationComponent::SwapGrids()
 {
-    // Start any timers, register with subsystems, etc.
-    // This method should contain any setup normally done in BeginPlay
-    // that's necessary for the simulation to run correctly
+    Swap(WindGrid, TempGrid);
 }
 
 void UWindSimulationComponent::SimulationStep(float DeltaTime)
 {
+    FScopeLock Lock(&SimulationLock);
+
     if (!IsGridInitialized())
     {
         WINDSYSTEM_LOG_WARNING(TEXT("WindGrid is not initialized"));
         return;
     }
 
-    TSharedPtr<FWindGrid> TempGrid = MakeShared<FWindGrid>(WindGrid->GetSize(), WindGrid->GetCellSize());
-
+    // Use TempGrid for intermediate calculations
     Diffuse(TempGrid, WindGrid, Viscosity, DeltaTime);
     Project(TempGrid, MakeShared<FWindGrid>(WindGrid->GetSize(), WindGrid->GetCellSize()), MakeShared<FWindGrid>(WindGrid->GetSize(), WindGrid->GetCellSize()));
     Advect(WindGrid, TempGrid, TempGrid, DeltaTime);
@@ -163,27 +150,6 @@ void UWindSimulationComponent::SimulationStep(float DeltaTime)
 
     ApplySIMDOperations(WindGrid, DeltaTime);
 
-    // After updating wind velocities
-    for (int32 i = 0; i < WindGrid->GetSize(); ++i)
-    {
-        for (int32 j = 0; j < WindGrid->GetSize(); ++j)
-        {
-            for (int32 k = 0; k < WindGrid->GetSize(); ++k)
-            {
-                FVector& Velocity = WindGrid->GetCell(i, j, k);
-                if (IsVectorFinite(Velocity) || Velocity.SizeSquared() > FMath::Square(GetMaxAllowedWindVelocity()))
-                {
-                    Velocity = Velocity.GetClampedToMaxSize(GetMaxAllowedWindVelocity());
-                    //WINDSYSTEM_LOG_WARNING(TEXT("Wind velocity clamped at cell (%d, %d, %d)"), i, j, k);
-                }
-                if (Velocity.ContainsNaN()) {
-                    Velocity = FVector::ZeroVector;
-                }
-            }
-        }
-    }
-
-    // After updating the wind grid, broadcast updates for visualization
     BroadcastWindUpdates();
 }
 
@@ -395,31 +361,79 @@ void UWindSimulationComponent::Advect(TSharedPtr<FWindGrid> Dst, const TSharedPt
     SetBoundary(Dst);
 }
 
-void UWindSimulationComponent::ApplySIMDOperations(TSharedPtr<FWindGrid> Grid, float Scalar)
+void UWindSimulationComponent::ApplySIMDOperations(TSharedPtr<FWindGrid> Grid, float DeltaTime)
 {
-    int32 Size = Grid->GetSize();
-    int32 TotalCells = Size * Size * Size;
-    int32 VectorCount = TotalCells / 4;
-
-    TArray<FVector>& GridData = Grid->GetGridData();
-
-    // Use SIMD operations for blocks of 4 vectors
-    for (int32 i = 0; i < VectorCount; i++)
+    if (!Grid)
     {
-        VectorRegister4Float* VectorPtr = reinterpret_cast<VectorRegister4Float*>(&GridData[i * 4]);
-        VectorRegister4Float ScalarVec = VectorSetFloat1(Scalar);
-        *VectorPtr = VectorMultiply(*VectorPtr, ScalarVec);
+        WINDSYSTEM_LOG_ERROR(TEXT("ApplySIMDOperations: Grid is null"));
+        return;
     }
 
-    // Handle remaining elements
+    int32 Size = Grid->GetSize();
+    int32 TotalCells = Size * Size * Size;
+    int32 VectorCount = TotalCells / 4; // Number of 4-wide vectors
+
+    TArray<FVector>& GridData = Grid->GetGridData();
+    
+    // Convert DeltaTime to a vector for SIMD operations
+    VectorRegister4Float DeltaTimeVec = VectorSetFloat1(DeltaTime);
+    
+    // Constants for clamping
+    VectorRegister4Float MaxSpeedVec = VectorSetFloat1(1000.0f); // Maximum allowed wind speed
+    VectorRegister4Float MinSpeedVec = VectorSetFloat1(-1000.0f); // Minimum allowed wind speed
+
+    // Process 4 vectors at a time using SIMD
+    for (int32 i = 0; i < VectorCount; i++)
+    {
+        // Load 4 FVector's (12 floats) into 3 SIMD vectors
+        VectorRegister4Float* VectorPtr = reinterpret_cast<VectorRegister4Float*>(&GridData[i * 4]);
+        VectorRegister4Float Vx = VectorPtr[0];
+        VectorRegister4Float Vy = VectorPtr[1];
+        VectorRegister4Float Vz = VectorPtr[2];
+
+        // Apply decay (simulate drag)
+        const VectorRegister4Float DecayFactor = VectorSetFloat1(0.99f);
+        Vx = VectorMultiply(Vx, DecayFactor);
+        Vy = VectorMultiply(Vy, DecayFactor);
+        Vz = VectorMultiply(Vz, DecayFactor);
+
+        // Apply some force (e.g., global wind)
+        const VectorRegister4Float GlobalWindForce = VectorSetFloat1(0.1f);
+        Vx = VectorAdd(Vx, VectorMultiply(GlobalWindForce, DeltaTimeVec));
+
+        // Clamp velocities to prevent extreme values
+        Vx = VectorMin(VectorMax(Vx, MinSpeedVec), MaxSpeedVec);
+        Vy = VectorMin(VectorMax(Vy, MinSpeedVec), MaxSpeedVec);
+        Vz = VectorMin(VectorMax(Vz, MinSpeedVec), MaxSpeedVec);
+
+        // Store the results back
+        VectorPtr[0] = Vx;
+        VectorPtr[1] = Vy;
+        VectorPtr[2] = Vz;
+    }
+
+    // Handle remaining elements (if any)
     for (int32 i = VectorCount * 4; i < TotalCells; i++)
     {
-        GridData[i] *= Scalar;
+        FVector& WindVelocity = GridData[i];
+        
+        // Apply decay
+        WindVelocity *= 0.99f;
+        
+        // Apply global wind force
+        WindVelocity.X += 0.1f * DeltaTime;
+        
+        // Clamp velocity
+        WindVelocity.X = FMath::Clamp(WindVelocity.X, -1000.0f, 1000.0f);
+        WindVelocity.Y = FMath::Clamp(WindVelocity.Y, -1000.0f, 1000.0f);
+        WindVelocity.Z = FMath::Clamp(WindVelocity.Z, -1000.0f, 1000.0f);
     }
 }
 
 FVector UWindSimulationComponent::GetWindVelocityAtLocation(const FVector& Location) const
 {
+    FScopeLock Lock(&SimulationLock);
+
     if (!IsGridInitialized())
     {
         WINDSYSTEM_LOG_ERROR(TEXT("WindGrid is not initialized"));
@@ -470,6 +484,7 @@ FVector UWindSimulationComponent::InterpolateVelocity(const FVector& Position) c
 
 void UWindSimulationComponent::AddWindAtLocation(const FVector& Location, const FVector& WindVelocity)
 {
+    FScopeLock Lock(&SimulationLock);
     if (!IsGridInitialized())
     {
         WINDSYSTEM_LOG_ERROR(TEXT("WindGrid is not initialized"));
@@ -493,9 +508,9 @@ void UWindSimulationComponent::AddWindAtLocation(const FVector& Location, const 
     if (X >= 0 && X < Size && Y >= 0 && Y < Size && Z >= 0 && Z < Size)
     {
         FVector CurrentVelocity = WindGrid->GetCell(X, Y, Z);
-        if (CurrentVelocity.ContainsNaN()) {
+      /*  if (CurrentVelocity.ContainsNaN()) {
             CurrentVelocity = FVector::ZeroVector;
-        }
+        }*/
         FVector NewVelocity = CurrentVelocity + WindVelocity;
         
         // Clamp the new velocity to prevent extreme values

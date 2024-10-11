@@ -80,16 +80,19 @@ FVector UWindSimulationSubsystem::GetWindVelocityAtLocation(const FVector& World
 
 void UWindSimulationSubsystem::RegisterWindGenerator(UWindGeneratorComponent* WindGenerator)
 {
+    FScopeLock Lock(&GeneratorsLock);
     WindGenerators.AddUnique(WindGenerator);
 }
 
 void UWindSimulationSubsystem::UnregisterWindGenerator(UWindGeneratorComponent* WindGenerator)
 {
+    FScopeLock Lock(&GeneratorsLock);
     WindGenerators.Remove(WindGenerator);
 }
 
 void UWindSimulationSubsystem::UpdateWindGenerators(float DeltaTime)
 {
+    FScopeLock Lock(&GeneratorsLock);
     for (UWindGeneratorComponent* WindGenerator : WindGenerators)
     {
         if (WindGenerator && WindGenerator->IsActive())

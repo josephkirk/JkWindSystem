@@ -36,6 +36,7 @@ private:
     UWindSimulationComponent* WindSimComponent;
 
     TArray<UWindGeneratorComponent*> WindGenerators;
+    FCriticalSection GeneratorsLock;
 
     FTSTicker::FDelegateHandle TickHandle;
 
