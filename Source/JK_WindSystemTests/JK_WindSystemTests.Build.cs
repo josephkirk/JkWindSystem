@@ -12,6 +12,8 @@ public class JK_WindSystemTests : ModuleRules
                 "Core",
                 "CoreUObject",
                 "Engine",
+                "RenderCore",
+                "RHI",
                 "InputCore",
                 "JK_WindSystem"
             }

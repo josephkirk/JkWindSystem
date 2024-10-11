@@ -140,7 +140,7 @@ void UWindSimulationComponent::SimulationStep(float DeltaTime)
 
     ApplySIMDOperations(WindGrid, DeltaTime);
 
-    BroadcastWindUpdates();
+    // BroadcastWindUpdates();
 }
 
 void UWindSimulationComponent::BroadcastWindUpdates()
