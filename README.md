@@ -14,6 +14,13 @@
 - Measured using the Unreal Insight profiling tool.
 - Main metrics: Mean and median FPS, percentage of total server time.
 - Tested various grid sizes and two simulation frequencies (once per tick and once per second).
+- Result on pure CPU:
+    **Grid Size:** 256 x 256 x 256
+    **Cell Size:** 3.91 meters
+    **Simulated Volume:** 1000.00 meters cubed
+    **Number of Wind Sources:** 10
+    **Average Time per Tick:** 4.7093 ms
+    **Total cells:** 16777216
 ## Current Limitation:
 - Server-side: Performance cost increases with grid size, especially when run every tick.
 - Running simulation once per second significantly reduced performance impact.
