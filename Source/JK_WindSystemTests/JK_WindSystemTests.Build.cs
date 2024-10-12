@@ -11,7 +11,7 @@ public class JK_WindSystemTests : ModuleRules
 				"JK_WindSystem/Visualizers"
 				// ... add other private include paths required here ...
 			}
-			);
+        );
         PublicDependencyModuleNames.AddRange(
             new string[]
             {
