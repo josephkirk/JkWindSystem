@@ -7,8 +7,8 @@ AWindSystemActor::AWindSystemActor()
     WindSimulationComponent = CreateDefaultSubobject<UWindSimulationComponent>(TEXT("WindSimulationComponent"));
     RootComponent = WindSimulationComponent;
 
-    WindGridVisualizer = CreateDefaultSubobject<UWindGridVisualizer>(TEXT("WindGridVisualizer"));
-    WindGridVisualizer->SetupAttachment(RootComponent);
+    WindSystemVisualizer = CreateDefaultSubobject<UWindSystemVisualizer>(TEXT("WindSystemVisualizer"));
+    WindSystemVisualizer->SetupAttachment(RootComponent);
 
     bShowWindVisualization = true;
 }
@@ -18,7 +18,7 @@ void AWindSystemActor::Tick(float DeltaTime)
     Super::Tick(DeltaTime);
 
     // You can add any per-frame updates here if needed
-    WindGridVisualizer->SetVisibility(bShowWindVisualization);
+    WindSystemVisualizer->SetVisibility(bShowWindVisualization);
 }
 
 #if WITH_EDITOR
@@ -28,7 +28,7 @@ void AWindSystemActor::PostEditChangeProperty(FPropertyChangedEvent& PropertyCha
 
     if (PropertyChangedEvent.GetPropertyName() == GET_MEMBER_NAME_CHECKED(AWindSystemActor, bShowWindVisualization))
     {
-        WindGridVisualizer->SetVisibility(bShowWindVisualization);
+        WindSystemVisualizer->SetVisibility(bShowWindVisualization);
     }
 }
 #endif

@@ -5,7 +5,13 @@ public class JK_WindSystemTests : ModuleRules
     public JK_WindSystemTests(ReadOnlyTargetRules Target) : base(Target)
     {
         PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
-
+		PrivateIncludePaths.AddRange(
+			new string[] {
+				"JK_WindSystem/WindGenerators",
+				"JK_WindSystem/Visualizers"
+				// ... add other private include paths required here ...
+			}
+			);
         PublicDependencyModuleNames.AddRange(
             new string[]
             {

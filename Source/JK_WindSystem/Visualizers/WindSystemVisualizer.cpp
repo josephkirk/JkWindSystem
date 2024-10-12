@@ -1,17 +1,17 @@
-#include "WindGridVisualizer.h"
+#include "WindSystemVisualizer.h"
 #include "WindSubsystem.h"
 #include "WindSystemActor.h"
 #include "SceneManagement.h"
 #include "PrimitiveSceneProxy.h"
 
-UWindGridVisualizer::UWindGridVisualizer()
+UWindSystemVisualizer::UWindSystemVisualizer()
 {
     PrimaryComponentTick.bCanEverTick = true;
     bAutoActivate = true;
     TimeSinceLastUpdate = 0.0f;
 }
 
-void UWindGridVisualizer::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+void UWindSystemVisualizer::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
@@ -23,12 +23,12 @@ void UWindGridVisualizer::TickComponent(float DeltaTime, ELevelTick TickType, FA
     }
 }
 
-FPrimitiveSceneProxy* UWindGridVisualizer::CreateSceneProxy()
+FPrimitiveSceneProxy* UWindSystemVisualizer::CreateSceneProxy()
 {
-    return new FWindGridSceneProxy(this);
+    return new FWindSystemFieldSceneProxy(this);
 }
 
-FBoxSphereBounds UWindGridVisualizer::CalcBounds(const FTransform& LocalToWorld) const
+FBoxSphereBounds UWindSystemVisualizer::CalcBounds(const FTransform& LocalToWorld) const
 {
     FBox BoundingBox(ForceInit);
     for (const FVector& Point : GridPoints)
@@ -38,7 +38,7 @@ FBoxSphereBounds UWindGridVisualizer::CalcBounds(const FTransform& LocalToWorld)
     return FBoxSphereBounds(BoundingBox);
 }
 
-void UWindGridVisualizer::UpdateGridData()
+void UWindSystemVisualizer::UpdateGridData()
 {
     UWindSimulationSubsystem* WindSubsystem = GetWorld()->GetSubsystem<UWindSimulationSubsystem>();
     if (!WindSubsystem || !WindSubsystem->GetWindSystemActor())
@@ -74,7 +74,7 @@ void UWindGridVisualizer::UpdateGridData()
     MarkRenderStateDirty();
 }
 
-FWindGridSceneProxy::FWindGridSceneProxy(const UWindGridVisualizer* InComponent)
+FWindSystemFieldSceneProxy::FWindSystemFieldSceneProxy(const UWindSystemVisualizer* InComponent)
     : FPrimitiveSceneProxy(InComponent)
     , GridPoints(InComponent->GridPoints)
     , WindVelocities(InComponent->WindVelocities)
@@ -82,7 +82,7 @@ FWindGridSceneProxy::FWindGridSceneProxy(const UWindGridVisualizer* InComponent)
 {
 }
 
-void FWindGridSceneProxy::GetDynamicMeshElements(const TArray<const FSceneView*>& Views, const FSceneViewFamily& ViewFamily, uint32 VisibilityMap, FMeshElementCollector& Collector) const
+void FWindSystemFieldSceneProxy::GetDynamicMeshElements(const TArray<const FSceneView*>& Views, const FSceneViewFamily& ViewFamily, uint32 VisibilityMap, FMeshElementCollector& Collector) const
 {
     QUICK_SCOPE_CYCLE_COUNTER(STAT_WindGridSceneProxy_GetDynamicMeshElements);
 
@@ -115,7 +115,7 @@ void FWindGridSceneProxy::GetDynamicMeshElements(const TArray<const FSceneView*>
     }
 }
 
-FPrimitiveViewRelevance FWindGridSceneProxy::GetViewRelevance(const FSceneView* View) const
+FPrimitiveViewRelevance FWindSystemFieldSceneProxy::GetViewRelevance(const FSceneView* View) const
 {
     FPrimitiveViewRelevance Result;
     Result.bDrawRelevance = IsShown(View);
@@ -125,12 +125,12 @@ FPrimitiveViewRelevance FWindGridSceneProxy::GetViewRelevance(const FSceneView* 
     return Result;
 }
 
-uint32 FWindGridSceneProxy::GetMemoryFootprint() const
+uint32 FWindSystemFieldSceneProxy::GetMemoryFootprint() const
 {
     return sizeof(*this) + GridPoints.GetAllocatedSize() + WindVelocities.GetAllocatedSize();
 }
 
-SIZE_T FWindGridSceneProxy::GetTypeHash() const
+SIZE_T FWindSystemFieldSceneProxy::GetTypeHash() const
 {
     static size_t UniquePointer;
     return reinterpret_cast<size_t>(&UniquePointer);

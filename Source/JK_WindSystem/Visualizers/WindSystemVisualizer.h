@@ -2,17 +2,17 @@
 
 #include "CoreMinimal.h"
 #include "Components/PrimitiveComponent.h"
-#include "WindGridVisualizer.generated.h"
+#include "WindSystemVisualizer.generated.h"
 
 class UWindSimulationComponent;
 
 UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
-class JK_WINDSYSTEM_API UWindGridVisualizer : public UPrimitiveComponent
+class JK_WINDSYSTEM_API UWindSystemVisualizer : public UPrimitiveComponent
 {
     GENERATED_BODY()
 
 public:
-    UWindGridVisualizer();
+    UWindSystemVisualizer();
 
     virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
     virtual FPrimitiveSceneProxy* CreateSceneProxy() override;
@@ -33,10 +33,10 @@ private:
     void UpdateGridData();
 };
 
-class FWindGridSceneProxy : public FPrimitiveSceneProxy
+class FWindSystemFieldSceneProxy : public FPrimitiveSceneProxy
 {
 public:
-    FWindGridSceneProxy(const UWindGridVisualizer* InComponent);
+    FWindSystemFieldSceneProxy(const UWindSystemVisualizer* InComponent);
 
     virtual void GetDynamicMeshElements(const TArray<const FSceneView*>& Views, const FSceneViewFamily& ViewFamily, uint32 VisibilityMap, FMeshElementCollector& Collector) const override;
     virtual FPrimitiveViewRelevance GetViewRelevance(const FSceneView* View) const override;

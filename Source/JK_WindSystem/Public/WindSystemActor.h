@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "WindSystemComponent.h"
-#include "WindGridVisualizer.h"
+#include "WindSystemVisualizer.h"
 #include "WindSystemActor.generated.h"
 
 UCLASS(NotPlaceable, Hidden)
@@ -18,7 +18,7 @@ public:
     UWindSimulationComponent* WindSimulationComponent;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind System")
-    UWindGridVisualizer* WindGridVisualizer;
+    UWindSystemVisualizer* WindSystemVisualizer;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wind System")
     bool bShowWindVisualization;
