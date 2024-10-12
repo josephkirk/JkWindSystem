@@ -48,7 +48,7 @@ private:
     FThreadSafeBool bShouldRun;
 };
 
-UCLASS(ClassGroup = (Custom), meta = (BlueprintSpawnableComponent))
+UCLASS(ClassGroup = (Custom), HideCategories = (Rendering, Replication, Collision, HLOD, Mobile, Physics, Mobility, VirtualTexture, ComponentTick))
 class JK_WINDSYSTEM_API UWindSimulationComponent : public USceneComponent
 {
     GENERATED_BODY()
@@ -68,9 +68,6 @@ public:
 
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
     float GetSimulationFrequency() const { return SimulationFrequency; }
-
-    UPROPERTY(BlueprintAssignable, Category = "Wind Simulation|Debug")
-    FOnWindCellUpdated OnWindCellUpdated;
 
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
     int32 GetGridSize() const { return GridSize; }

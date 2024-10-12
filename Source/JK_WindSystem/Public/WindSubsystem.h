@@ -2,9 +2,11 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
-#include "WindSystemComponent.h"
 #include "WindSourceComponent.h"
 #include "WindSubsystem.generated.h"
+
+class AWindSystemActor;
+class UWindGeneratorComponent;
 
 UCLASS()
 class JK_WINDSYSTEM_API UWindSimulationSubsystem : public UWorldSubsystem
@@ -30,10 +32,11 @@ public:
     void UnregisterWindGenerator(UWindGeneratorComponent* WindGenerator);
 
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
-    UWindSimulationComponent* GetWindSimComponent() const { return WindSimComponent; }
+    AWindSystemActor* GetWindSystemActor() const { return WindSystemActor; }
+
 private:
     UPROPERTY()
-    UWindSimulationComponent* WindSimComponent;
+    AWindSystemActor* WindSystemActor;
 
     TArray<UWindGeneratorComponent*> WindGenerators;
     FCriticalSection GeneratorsLock;
@@ -41,5 +44,6 @@ private:
     FTSTicker::FDelegateHandle TickHandle;
 
     void UpdateWindGenerators(float DeltaTime);
-    void EnsureWindSimComponentInitialized();
+    void EnsureWindSystemActorInitialized();
+    void DestroyWindSystemActor();
 };

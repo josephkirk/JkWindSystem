@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "WindSourceComponent.h"
 #include "Components/BillboardComponent.h"
+#include "PointWindVisualizer.h"
 #include "PointWindGeneratorActor.generated.h"
 
 UCLASS(BlueprintType, Placeable, Meta=(DisplayName="Point Wind Generator", Category="Wind System"))
@@ -14,7 +15,7 @@ class JK_WINDSYSTEM_API APointWindGeneratorActor : public AActor
 public:
     APointWindGeneratorActor();
 
-    virtual void Tick(float DeltaTime) override;
+    virtual void OnConstruction(const FTransform& Transform) override;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wind")
     UPointWindGeneratorComponent* WindGeneratorComponent;
@@ -22,13 +23,8 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Visualization")
     UBillboardComponent* BillboardComponent;
 
-#if WITH_EDITORONLY_DATA
-    UPROPERTY(VisibleAnywhere, Category = "Visualization")
-    class UArrowComponent* ArrowComponent;
-#endif
-
-    UPROPERTY(EditAnywhere, Category = "Visualization")
-    bool bShowDebugVisualization;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Visualization")
+    UPointWindVisualizer* WindVisualizer;
 
 protected:
     virtual void BeginPlay() override;
@@ -36,7 +32,4 @@ protected:
 #if WITH_EDITOR
     virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 #endif
-
-private:
-    void UpdateVisualization();
 };

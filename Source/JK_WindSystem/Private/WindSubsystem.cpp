@@ -1,10 +1,10 @@
 #include "WindSubsystem.h"
-#include "Engine/Engine.h"
-#include "TimerManager.h"
-#include "WindSystemCommon.h"
+#include "WindSystemActor.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
 
 UWindSimulationSubsystem::UWindSimulationSubsystem()
-    : WindSimComponent(nullptr)
+    : WindSystemActor(nullptr)
 {
 }
 
@@ -12,30 +12,22 @@ void UWindSimulationSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
     Super::Initialize(Collection);
 
-    EnsureWindSimComponentInitialized();
+    EnsureWindSystemActorInitialized();
 
-    // Set up tick function
     TickHandle = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateUObject(this, &UWindSimulationSubsystem::Tick), 0.0f);
 }
 
 void UWindSimulationSubsystem::Deinitialize()
 {
-    // Remove tick function
     FTSTicker::GetCoreTicker().RemoveTicker(TickHandle);
 
-    // Clean up WindSimulationComponent
-    if (WindSimComponent)
-    {
-        WindSimComponent->DestroyComponent();
-        WindSimComponent = nullptr;
-    }
+    DestroyWindSystemActor();
 
     Super::Deinitialize();
 }
 
 bool UWindSimulationSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 {
-    // Only create for game worlds
     if (const UWorld* World = Cast<UWorld>(Outer))
     {
         return World->IsGameWorld();
@@ -45,11 +37,11 @@ bool UWindSimulationSubsystem::ShouldCreateSubsystem(UObject* Outer) const
 
 bool UWindSimulationSubsystem::Tick(float DeltaTime)
 {
-    EnsureWindSimComponentInitialized();
+    EnsureWindSystemActorInitialized();
 
-    if (WindSimComponent)
+    if (WindSystemActor && WindSystemActor->WindSimulationComponent)
     {
-        WindSimComponent->SimulationStep(DeltaTime);
+        WindSystemActor->WindSimulationComponent->SimulationStep(DeltaTime);
     }
 
     UpdateWindGenerators(DeltaTime);
@@ -57,25 +49,21 @@ bool UWindSimulationSubsystem::Tick(float DeltaTime)
     return true;
 }
 
-void UWindSimulationSubsystem::AddWindAtLocation(const FVector& Location, const FVector& WindVelocity)
-{
-    EnsureWindSimComponentInitialized();
-
-    if (WindSimComponent)
-    {
-        WindSimComponent->AddWindAtLocation(Location, WindVelocity);
-    }
-}
-
 FVector UWindSimulationSubsystem::GetWindVelocityAtLocation(const FVector& WorldLocation) const
 {
-    if (!WindSimComponent)
+    if (WindSystemActor && WindSystemActor->WindSimulationComponent)
     {
-        WINDSYSTEM_LOG_ERROR(TEXT("WindSimComponent is not initialized in GetWindVelocityAtLocation"));
-        return FVector::ZeroVector;
+        return WindSystemActor->WindSimulationComponent->GetWindVelocityAtLocation(WorldLocation);
     }
+    return FVector::ZeroVector;
+}
 
-    return WindSimComponent->GetWindVelocityAtLocation(WorldLocation);
+void UWindSimulationSubsystem::AddWindAtLocation(const FVector& Location, const FVector& WindVelocity)
+{
+    if (WindSystemActor && WindSystemActor->WindSimulationComponent)
+    {
+        WindSystemActor->WindSimulationComponent->AddWindAtLocation(Location, WindVelocity);
+    }
 }
 
 void UWindSimulationSubsystem::RegisterWindGenerator(UWindGeneratorComponent* WindGenerator)
@@ -102,22 +90,41 @@ void UWindSimulationSubsystem::UpdateWindGenerators(float DeltaTime)
     }
 }
 
-void UWindSimulationSubsystem::EnsureWindSimComponentInitialized()
+void UWindSimulationSubsystem::EnsureWindSystemActorInitialized()
 {
-    if (!WindSimComponent)
+    if (!WindSystemActor)
     {
         UWorld* World = GetWorld();
         if (World)
         {
-            AActor* WindSimActor = World->SpawnActor<AActor>();
-            WindSimComponent = NewObject<UWindSimulationComponent>(WindSimActor);
-            WindSimComponent->RegisterComponent();
-            WindSimComponent->InitializeForTesting(); // Call this for both testing and normal initialization
-            WINDSYSTEM_LOG(Log, TEXT("WindSimulationComponent created and initialized"));
+            // Check if a WindSystemActor already exists in the world
+            for (TActorIterator<AWindSystemActor> It(World); It; ++It)
+            {
+                WindSystemActor = *It;
+                break;
+            }
+
+            // If no WindSystemActor exists, create a new one
+            if (!WindSystemActor)
+            {
+                FActorSpawnParameters SpawnParams;
+                SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+                WindSystemActor = World->SpawnActor<AWindSystemActor>(SpawnParams);
+            }
+
+            if (WindSystemActor)
+            {
+                WindSystemActor->WindSimulationComponent->InitializeForTesting();
+            }
         }
-        else
-        {
-            WINDSYSTEM_LOG_ERROR(TEXT("Failed to create WindSimulationComponent: World is null"));
-        }
+    }
+}
+
+void UWindSimulationSubsystem::DestroyWindSystemActor()
+{
+    if (WindSystemActor)
+    {
+        WindSystemActor->Destroy();
+        WindSystemActor = nullptr;
     }
 }

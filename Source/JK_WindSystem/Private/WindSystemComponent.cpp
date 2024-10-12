@@ -41,7 +41,6 @@ UWindSimulationComponent::UWindSimulationComponent()
     Viscosity = GetSettings()->Viscosity;
     SimulationFrequency = GetSettings()->SimulationFrequency;
     bAutoActivate = true;
-
 }
 
 void UWindSimulationComponent::BeginPlay()
@@ -141,42 +140,6 @@ void UWindSimulationComponent::SimulationStep(float DeltaTime)
     ApplySIMDOperations(WindGrid, DeltaTime);
 
     // BroadcastWindUpdates();
-}
-
-void UWindSimulationComponent::BroadcastWindUpdates()
-{
-    if (!IsGridInitialized() || bIsBroadcasting)
-    {
-        return;
-    }
-
-    bIsBroadcasting = true;
-
-    int32 Size = WindGrid->GetSize();
-    float GridCellSize = WindGrid->GetCellSize();
-    FVector Origin = GetComponentLocation();
-
-    for (int32 z = 0; z < Size; ++z)
-    {
-        for (int32 y = 0; y < Size; ++y)
-        {
-            for (int32 x = 0; x < Size; ++x)
-            {
-                FVector CellCenter = Origin + FVector(x * GridCellSize, y * GridCellSize, z * GridCellSize);
-                FVector WindVelocity = WindGrid->GetCell(x, y, z);
-
-                // Only broadcast if the wind velocity is significant
-                if (WindVelocity.SizeSquared() > 0.01f)
-                {
-                    OnWindCellUpdated.Broadcast(CellCenter, WindVelocity, GridCellSize);
-                    WINDSYSTEM_LOG_VERBOSE(TEXT("Wind cell updated: Center=%s, Velocity=%s"),
-                        *CellCenter.ToString(), *WindVelocity.ToString());
-                }
-            }
-        }
-    }
-
-    bIsBroadcasting = false;
 }
 
 void UWindSimulationComponent::Diffuse(TSharedPtr<FWindGrid> Dst, const TSharedPtr<FWindGrid> Src, float Diff, float Dt)
