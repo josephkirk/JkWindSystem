@@ -8,7 +8,8 @@ public class JK_WindSystemEditor : ModuleRules
 		PrivateIncludePaths.AddRange(
 			new string[] {
 				"JK_WindSystem/WindGenerators",
-				"JK_WindSystem/Visualizers"
+				"JK_WindSystem/Visualizers",
+                "JK_WindSystemEditor/Widgets"
 				// ... add other private include paths required here ...
 			}
         );
@@ -29,7 +30,11 @@ public class JK_WindSystemEditor : ModuleRules
                 "SlateCore",
                 "UnrealEd",
                 "ToolMenus",
-                "EditorSubsystem"
+                "EditorSubsystem",
+                "LevelEditor",
+                "WorkspaceMenuStructure",
+                "EditorStyle",
+                "InputCore"
             }
         );
     }

@@ -1,46 +1,64 @@
 #include "JK_WindSystemEditor.h"
+#include "WindSettingsEditorTabManager.h"
+#include "WindGenerators.h"
 #include "LevelEditor.h"
 #include "Framework/MultiBox/MultiBoxBuilder.h"
-#include "ToolMenus.h"
-#include "PointWindGeneratorActor.h"
-#include "DirectionalWindGeneratorActor.h"
-#include "VortexWindGeneratorActor.h"
-#include "SplineWindGeneratorActor.h"
+#include "Modules/ModuleManager.h"
+#include "ISettingsModule.h"
+#include "WindSystemSettings.h"
 
 #define LOCTEXT_NAMESPACE "FJK_WindSystemEditorModule"
 
 void FJK_WindSystemEditorModule::StartupModule()
 {
+    RegisterSettings();
+    
     FWindSystemMenuCommands::Register();
 
     PluginCommands = MakeShareable(new FUICommandList);
 
     PluginCommands->MapAction(
         FWindSystemMenuCommands::Get().OpenWindSettingsConfig,
-        FExecuteAction::CreateRaw(this, &FJK_WindSystemEditorModule::OpenWindSettingsConfig),
+        FExecuteAction::CreateStatic(&FJK_WindSystemEditorModule::OpenWindSettingsEditor),
         FCanExecuteAction());
 
     PluginCommands->MapAction(
         FWindSystemMenuCommands::Get().CreatePointWindSource,
-        FExecuteAction::CreateRaw(this, &FJK_WindSystemEditorModule::CreatePointWindSource),
+        FExecuteAction::CreateStatic(&FJK_WindSystemEditorModule::CreatePointWindSource),
         FCanExecuteAction());
 
     PluginCommands->MapAction(
         FWindSystemMenuCommands::Get().CreateDirectionalWindSource,
-        FExecuteAction::CreateRaw(this, &FJK_WindSystemEditorModule::CreateDirectionalWindSource),
+        FExecuteAction::CreateStatic(&FJK_WindSystemEditorModule::CreateDirectionalWindSource),
         FCanExecuteAction());
 
     PluginCommands->MapAction(
         FWindSystemMenuCommands::Get().CreateVortexWindSource,
-        FExecuteAction::CreateRaw(this, &FJK_WindSystemEditorModule::CreateVortexWindSource),
+        FExecuteAction::CreateStatic(&FJK_WindSystemEditorModule::CreateVortexWindSource),
         FCanExecuteAction());
 
     PluginCommands->MapAction(
         FWindSystemMenuCommands::Get().CreateSplineWindSource,
-        FExecuteAction::CreateRaw(this, &FJK_WindSystemEditorModule::CreateSplineWindSource),
+        FExecuteAction::CreateStatic(&FJK_WindSystemEditorModule::CreateSplineWindSource),
         FCanExecuteAction());
 
     UToolMenus::RegisterStartupCallback(FSimpleMulticastDelegate::FDelegate::CreateRaw(this, &FJK_WindSystemEditorModule::RegisterMenus));
+
+    FLevelEditorModule& LevelEditorModule = FModuleManager::LoadModuleChecked<FLevelEditorModule>("LevelEditor");
+    TSharedPtr<FExtensibilityManager> ExtensibilityManager = LevelEditorModule.GetToolBarExtensibilityManager();
+
+    TSharedPtr<FUICommandList> CommandList = MakeShareable(new FUICommandList);
+    
+    // Initialize ToolbarExtender
+    ToolbarExtender = MakeShareable(new FExtender);
+    ToolbarExtender->AddToolBarExtension(
+        "Settings",
+        EExtensionHook::After,
+        nullptr,
+        FToolBarExtensionDelegate::CreateRaw(this, &FJK_WindSystemEditorModule::AddToolBarButtons)
+    );
+    
+    LevelEditorModule.GetToolBarExtensibilityManager()->AddExtender(ToolbarExtender);
 }
 
 void FJK_WindSystemEditorModule::ShutdownModule()
@@ -48,6 +66,48 @@ void FJK_WindSystemEditorModule::ShutdownModule()
     UToolMenus::UnRegisterStartupCallback(this);
     UToolMenus::UnregisterOwner(this);
     FWindSystemMenuCommands::Unregister();
+    UnregisterSettings();
+    if (FModuleManager::Get().IsModuleLoaded("LevelEditor"))
+    {
+        FLevelEditorModule& LevelEditorModule = FModuleManager::GetModuleChecked<FLevelEditorModule>("LevelEditor");
+        TSharedPtr<FExtensibilityManager> ExtensibilityManager = LevelEditorModule.GetToolBarExtensibilityManager();
+
+        LevelEditorModule.GetToolBarExtensibilityManager()->RemoveExtender(ToolbarExtender);
+    }
+}
+
+void AddWindSourceMenuExtension(UToolMenu* Menu)
+{
+    FToolMenuSection& Section = Menu->AddSection("WindSources", LOCTEXT("WindSourcesHeader", "Wind Sources"));
+    
+    Section.AddMenuEntry("CreatPointWindSource",
+        LOCTEXT("CreatPointWindSource", "Create Point Wind"),
+        LOCTEXT("CreatPointWindSourceTooltip", "Create Point Wind Source"),
+        FSlateIcon(),
+        FUIAction(FExecuteAction::CreateStatic(&FJK_WindSystemEditorModule::CreatePointWindSource))
+    );
+    // Section.AddMenuEntry(FWindSystemMenuCommands::Get().CreateDirectionalWindSource, PluginCommands);
+    // Section.AddMenuEntry(FWindSystemMenuCommands::Get().CreateVortexWindSource, PluginCommands);
+    // Section.AddMenuEntry(FWindSystemMenuCommands::Get().CreateSplineWindSource, PluginCommands);
+}
+
+void AddWindSystemMenuExtension(UToolMenu* Menu)
+{
+    FToolMenuSection& Section = Menu->AddSection("WindSystemActions", LOCTEXT("WindSystemActionsHeader", "Wind System Actions"));
+    
+    Section.AddMenuEntry("OpenWindSettingsConfig",
+        LOCTEXT("OpenWindSettingsConfig", "Wind Settings Config"),
+        LOCTEXT("OpenWindSettingsConfigTooltip", "Open Wind Settings Configuration"),
+        FSlateIcon(),
+        FUIAction(FExecuteAction::CreateStatic(&FJK_WindSystemEditorModule::OpenWindSettingsEditor))
+    );
+    
+    Section.AddSubMenu(
+        "WindSources",
+        LOCTEXT("WindSourceSubMenu", "Wind System Sources"),
+        LOCTEXT("WindSourceSubMenuTooltip", "Wind System Sources Creator"),
+        FNewToolMenuDelegate::CreateStatic(&AddWindSourceMenuExtension)
+    );
 }
 
 void FJK_WindSystemEditorModule::RegisterMenus()
@@ -60,32 +120,16 @@ void FJK_WindSystemEditorModule::RegisterMenus()
     Section.AddSubMenu(
         "JK Wind System",
         LOCTEXT("WindSystemSubMenu", "Wind System"),
-        LOCTEXT("WindSystemSubMenuTooltip", "Option For WindSystem"),
-        FNewMenuDelegate::CreateRaw(this, &FJK_WindSystemEditorModule::AddWindSystemMenuExtension)
+        LOCTEXT("WindSystemSubMenuTooltip", "Options For WindSystem"),
+        FNewToolMenuDelegate::CreateStatic(&AddWindSystemMenuExtension)
     );
 }
 
-void FJK_WindSystemEditorModule::AddWindSystemMenuExtension(FMenuBuilder& MenuBuilder)
-{
-    MenuBuilder.AddMenuEntry(FWindSystemMenuCommands::Get().OpenWindSettingsConfig);
-    MenuBuilder.AddSubMenu(
-        LOCTEXT("WindSourceSubMenu", "Wind System Sources"),
-        LOCTEXT("WindSourceSubMenuTooltip", "WindSystem System Sources Creator"),
-        FNewMenuDelegate::CreateRaw(this, &FJK_WindSystemEditorModule::AddWindSourceMenuExtension)
-    );
-}
 
-void FJK_WindSystemEditorModule::AddWindSourceMenuExtension(FMenuBuilder& MenuBuilder)
-{
-    MenuBuilder.AddMenuEntry(FWindSystemMenuCommands::Get().CreatePointWindSource);
-    MenuBuilder.AddMenuEntry(FWindSystemMenuCommands::Get().CreateDirectionalWindSource);
-    MenuBuilder.AddMenuEntry(FWindSystemMenuCommands::Get().CreateVortexWindSource);
-    MenuBuilder.AddMenuEntry(FWindSystemMenuCommands::Get().CreateSplineWindSource);
-}
 
 void FJK_WindSystemEditorModule::OpenWindSettingsConfig()
 {
-    UE_LOG(LogTemp, Warning, TEXT("Opening Wind Settings Config..."));
+    UE_LOG(LogTemp, Log, TEXT("Opening Wind Settings Config..."));
 }
 
 void FJK_WindSystemEditorModule::CreatePointWindSource()
@@ -98,7 +142,7 @@ void FJK_WindSystemEditorModule::CreatePointWindSource()
         APointWindGeneratorActor* PointWindActor = World->SpawnActor<APointWindGeneratorActor>(Location, Rotation);
         if (PointWindActor)
         {
-            UE_LOG(LogTemp, Warning, TEXT("Point Wind Source created"));
+            UE_LOG(LogTemp, Log, TEXT("Point Wind Source created"));
         }
     }
 }
@@ -113,7 +157,7 @@ void FJK_WindSystemEditorModule::CreateDirectionalWindSource()
         ADirectionalWindGeneratorActor* DirectionalWindActor = World->SpawnActor<ADirectionalWindGeneratorActor>(Location, Rotation);
         if (DirectionalWindActor)
         {
-            UE_LOG(LogTemp, Warning, TEXT("Directional Wind Source created"));
+            UE_LOG(LogTemp, Log, TEXT("Directional Wind Source created"));
         }
     }
 }
@@ -128,7 +172,7 @@ void FJK_WindSystemEditorModule::CreateVortexWindSource()
         AVortexWindGeneratorActor* VortexWindActor = World->SpawnActor<AVortexWindGeneratorActor>(Location, Rotation);
         if (VortexWindActor)
         {
-            UE_LOG(LogTemp, Warning, TEXT("Vortex Wind Source created"));
+            UE_LOG(LogTemp, Log, TEXT("Vortex Wind Source created"));
         }
     }
 }
@@ -143,7 +187,7 @@ void FJK_WindSystemEditorModule::CreateSplineWindSource()
         ASplineWindGeneratorActor* SplineWindActor = World->SpawnActor<ASplineWindGeneratorActor>(Location, Rotation);
         if (SplineWindActor)
         {
-            UE_LOG(LogTemp, Warning, TEXT("Spline Wind Source created"));
+            UE_LOG(LogTemp, Log, TEXT("Spline Wind Source created"));
         }
     }
 }
@@ -155,6 +199,46 @@ void FWindSystemMenuCommands::RegisterCommands()
     UI_COMMAND(CreateDirectionalWindSource, "Directional Wind Source", "Create a Directional Wind Source", EUserInterfaceActionType::Button, FInputChord());
     UI_COMMAND(CreateVortexWindSource, "Vortex Wind Source", "Create a Vortex Wind Source", EUserInterfaceActionType::Button, FInputChord());
     UI_COMMAND(CreateSplineWindSource, "Spline Wind Source", "Create a Spline Wind Source", EUserInterfaceActionType::Button, FInputChord());
+}
+
+void FJK_WindSystemEditorModule::AddToolBarButtons(FToolBarBuilder& Builder)
+{
+    Builder.AddToolBarButton(
+        FUIAction(FExecuteAction::CreateStatic(&FJK_WindSystemEditorModule::OpenWindSettingsEditor)),
+        NAME_None,
+        LOCTEXT("WindSettingsButton", "Wind Settings"),
+        LOCTEXT("WindSettingsButtonTooltip", "Open Wind Settings Editor"),
+        FSlateIcon(FAppStyle::GetAppStyleSetName(), "LevelEditor.GameSettings")
+    );
+}
+
+void FJK_WindSystemEditorModule::OpenWindSettingsEditor()
+{
+    TSharedRef<FWindSettingsEditorTabManager> WindSettingsEditor(new FWindSettingsEditorTabManager());
+    WindSettingsEditor->InitWindSettingsEditor(nullptr);
+}
+
+void FJK_WindSystemEditorModule::RegisterSettings()
+{
+
+    UnregisterSettings();
+
+    if (ISettingsModule* SettingsModule = FModuleManager::GetModulePtr<ISettingsModule>("Settings"))
+    {
+        SettingsModule->RegisterSettings("Project", "Plugins", "Wind System",
+            LOCTEXT("WindSystemSettingsName", "Wind System"),
+            LOCTEXT("WindSystemSettingsDescription", "Configure the Wind System settings"),
+            GetMutableDefault<UWindSystemSettings>()
+        );
+    }
+}
+
+void FJK_WindSystemEditorModule::UnregisterSettings()
+{
+    if (ISettingsModule* SettingsModule = FModuleManager::GetModulePtr<ISettingsModule>("Settings"))
+    {
+        SettingsModule->UnregisterSettings("Project", "Plugins", "Wind System");
+    }
 }
 
 #undef LOCTEXT_NAMESPACE

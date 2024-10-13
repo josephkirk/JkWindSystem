@@ -14,25 +14,34 @@ class FJK_WindSystemEditorModule : public IModuleInterface
 public:
     virtual void StartupModule() override;
     virtual void ShutdownModule() override;
-
+    void OpenWindSettingsConfig();
+    static void OpenWindSettingsEditor();
+    static void CreatePointWindSource();
+    static void CreateDirectionalWindSource();
+    static void CreateVortexWindSource();
+    static void CreateSplineWindSource();
 private:
     void RegisterMenus();
-    void AddWindSystemMenuExtension(FMenuBuilder& MenuBuilder);
-    void AddWindSourceMenuExtension(FMenuBuilder& MenuBuilder);
-    void OpenWindSettingsConfig();
-    void CreatePointWindSource();
-    void CreateDirectionalWindSource();
-    void CreateVortexWindSource();
-    void CreateSplineWindSource();
 
+
+    void AddToolBarButtons(FToolBarBuilder& Builder);
+    
+    void RegisterSettings();
+    void UnregisterSettings();
+private:
     TSharedPtr<class FUICommandList> PluginCommands;
+    TSharedPtr<FExtender> ToolbarExtender;
 };
 
 class FWindSystemMenuCommands : public TCommands<FWindSystemMenuCommands>
 {
 public:
     FWindSystemMenuCommands()
-        : TCommands<FWindSystemMenuCommands>(TEXT("WindSystemMenu"), NSLOCTEXT("Contexts", "WindSystemMenu", "Wind System Menu"), NAME_None, FAppStyle::GetAppStyleSetName())
+        : TCommands<FWindSystemMenuCommands>(
+            TEXT("WindSystemMenu"),
+            NSLOCTEXT("Contexts", "WindSystemMenu", "Wind System Menu"),
+            NAME_None,
+            FAppStyle::GetAppStyleSetName())
     {
     }
 

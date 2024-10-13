@@ -162,8 +162,8 @@ bool FWindSystemLargeScalePerformanceTest::RunTest(const FString& Parameters)
     const float OriginalCellSize = WindSettings->CellSize;
 
     // Set new test settings
-    WindSettings->GridSize = 256; // Example test size
-    WindSettings->CellSize = 3.90625f; // This makes the total volume 1km^3 (256 * 3.90625 = 1000)
+    WindSettings->GridSize = 1024; // Example test size
+    WindSettings->CellSize = 100.0f; // This makes the total volume 1km^3 =
     WindSettings->PostEditChange(); // Notify that we've changed the settings
 
     // Create the WindSimulationComponent
@@ -227,8 +227,8 @@ bool FWindSystemLargeScalePerformanceTest::RunTest(const FString& Parameters)
 
         UE_LOG(LogTemp, Log, TEXT("Wind System Large Scale Performance Test Results:"));
         UE_LOG(LogTemp, Log, TEXT("Grid Size: %d x %d x %d"), GridSize, GridSize, GridSize);
-        UE_LOG(LogTemp, Log, TEXT("Cell Size: %.2f meters"), CellSize);
-        UE_LOG(LogTemp, Log, TEXT("Simulated Volume: %.2f meters cubed"), SimulatedVolume);
+        UE_LOG(LogTemp, Log, TEXT("Cell Size: %.2f meters"), CellSize/100.0f);
+        UE_LOG(LogTemp, Log, TEXT("Simulated Volume: %.2f meters cubed"), SimulatedVolume/100.0f);
         UE_LOG(LogTemp, Log, TEXT("Number of Wind Sources: %d"), NumWindSources);
         UE_LOG(LogTemp, Log, TEXT("Average Time per Tick: %.4f ms"), AverageTime);
 
