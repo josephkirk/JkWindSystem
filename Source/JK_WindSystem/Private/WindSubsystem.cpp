@@ -42,6 +42,11 @@ bool UWindSimulationSubsystem::Tick(float DeltaTime)
 
     if (WindSystemActor && WindSystemActor->WindSimulationComponent)
     {
+        
+        if (WindGridCenter)
+        {
+            WindSystemActor->WindSimulationComponent->UpdateGridCenter(WindGridCenter->GetActorLocation());
+        }
         WindSystemActor->WindSimulationComponent->SimulationStep(DeltaTime);
     }
 
@@ -82,6 +87,28 @@ void UWindSimulationSubsystem::UnregisterWindGenerator(UWindGeneratorComponent* 
 {
     FScopeLock Lock(&GeneratorsLock);
     WindGenerators.Remove(WindGenerator);
+}
+
+void UWindSimulationSubsystem::RegisterWindGridCenter(AActor* GridCenter)
+{
+    WindGridCenter = GridCenter;
+    if (WindSystemActor)
+    {
+        WindSystemActor->WindSimulationComponent->UpdateGridCenter(GridCenter->GetActorLocation());
+    }
+}
+
+void UWindSimulationSubsystem::UnregisterWindGridCenter(AActor* GridCenter)
+{
+    if (WindGridCenter == GridCenter)
+    {
+        WindGridCenter = nullptr;
+    }
+}
+
+FVector UWindSimulationSubsystem::GetGridCenter() const
+{
+    return WindGridCenter ? WindGridCenter->GetActorLocation() : FVector::ZeroVector;
 }
 
 void UWindSimulationSubsystem::RegisterWindZone(UWindZoneVolumeComponent* Modifier)

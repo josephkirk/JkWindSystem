@@ -72,6 +72,12 @@ void UWindSimulationComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
     Super::EndPlay(EndPlayReason);
 }
 
+void UWindSimulationComponent::UpdateGridCenter(const FVector& NewCenter)
+{
+    PreviousGridCenter = GridCenter;
+    GridCenter = NewCenter;
+}
+
 float UWindSimulationComponent::GetMaxAllowedWindVelocity() const
 {
     return GetSettings()->MaxAllowedWindVelocity;
@@ -131,6 +137,7 @@ void UWindSimulationComponent::SimulationStep(float DeltaTime)
         return;
     }
 
+    HandleGridMovement();
     // Use TempGrid for intermediate calculations
     Diffuse(TempGrid, WindGrid, Viscosity, DeltaTime);
     Project(TempGrid, MakeShared<FWindGrid>(WindGrid->GetSize(), WindGrid->GetCellSize()), MakeShared<FWindGrid>(WindGrid->GetSize(), WindGrid->GetCellSize()));
@@ -142,6 +149,44 @@ void UWindSimulationComponent::SimulationStep(float DeltaTime)
     // BroadcastWindUpdates();
 }
 
+void UWindSimulationComponent::HandleGridMovement()
+{
+        // Handle grid movement
+    FVector GridMovement = GridCenter - PreviousGridCenter;
+    if (!GridMovement.IsNearlyZero())
+    {
+        FVector GridMovementCells = GridMovement / CellSize;
+        int32 ShiftX = FMath::FloorToInt(GridMovementCells.X);
+        int32 ShiftY = FMath::FloorToInt(GridMovementCells.Y);
+        int32 ShiftZ = FMath::FloorToInt(GridMovementCells.Z);
+
+        TSharedPtr<FWindGrid> NewGrid = MakeShared<FWindGrid>(WindGrid->GetSize(), WindGrid->GetCellSize());
+        
+        for (int32 x = 0; x < WindGrid->GetSize(); ++x)
+        {
+            for (int32 y = 0; y < WindGrid->GetSize(); ++y)
+            {
+                for (int32 z = 0; z < WindGrid->GetSize(); ++z)
+                {
+                    int32 OldX = x - ShiftX;
+                    int32 OldY = y - ShiftY;
+                    int32 OldZ = z - ShiftZ;
+
+                    if (WindGrid->IsValidIndex(OldX, OldY, OldZ))
+                    {
+                        NewGrid->SetCell(x, y, z, WindGrid->GetCell(OldX, OldY, OldZ));
+                    }
+                    else
+                    {
+                        NewGrid->SetCell(x, y, z, FVector::ZeroVector);
+                    }
+                }
+            }
+        }
+
+        WindGrid = NewGrid;
+    }
+}
 void UWindSimulationComponent::Diffuse(TSharedPtr<FWindGrid> Dst, const TSharedPtr<FWindGrid> Src, float Diff, float Dt)
 {
     float a = Dt * Diff * (Src->GetSize() - 2) * (Src->GetSize() - 2);
@@ -393,7 +438,7 @@ FVector UWindSimulationComponent::GetWindVelocityAtLocation(const FVector& Locat
         return FVector::ZeroVector;
     }
 
-    FVector LocalPos = GetComponentTransform().InverseTransformPosition(Location);
+    FVector LocalPos = Location - GridCenter;
     FVector GridPos = LocalPos / WindGrid->GetCellSize();
 
     return InterpolateVelocity(GridPos);
@@ -450,7 +495,7 @@ void UWindSimulationComponent::AddWindAtLocation(const FVector& Location, const 
         return;
     }
 
-    FVector LocalPos = GetComponentTransform().InverseTransformPosition(Location);
+    FVector LocalPos = Location - GridCenter;
     FVector GridPos = LocalPos / CellSize;
 
     int32 X = FMath::FloorToInt(GridPos.X);

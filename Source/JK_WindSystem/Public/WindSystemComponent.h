@@ -10,6 +10,8 @@
 #include "WindSystemSettings.h"
 #include "WindSystemComponent.generated.h"
 
+class UWindSimulationComponent;
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnWindCellUpdated, const FVector&, CellCenter, const FVector&, WindVelocity, float, CellSize);
 
 class FWindGrid
@@ -34,6 +36,8 @@ private:
 
     int32 GetIndex(int32 X, int32 Y, int32 Z) const;
     bool IsValidIndex(int32 X, int32 Y, int32 Z) const;
+
+friend UWindSimulationComponent;
 };
 
 class FWindSimulationWorker : public FRunnable
@@ -86,6 +90,7 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
     float GetMaxAllowedWindVelocity() const;
 
+    void UpdateGridCenter(const FVector& NewCenter);
 private:
     TSharedPtr<FWindGrid> WindGrid;
     TSharedPtr<FWindGrid> TempGrid;
@@ -102,12 +107,14 @@ private:
 
     UPROPERTY()
     float CellSize;
-
+    FVector GridCenter;
+    FVector PreviousGridCenter;
     bool bIsBroadcasting = false;
 
     const UWindSystemSettings* GetSettings() const;
     void SwapGrids();
     void BroadcastWindUpdates();
+    void HandleGridMovement();
     void InitializeGrid();
     bool IsGridInitialized() const { return WindGrid != nullptr; }
     void Diffuse(TSharedPtr<FWindGrid> Dst, const TSharedPtr<FWindGrid> Src, float Diff, float Dt);

@@ -31,6 +31,10 @@ public:
     void RegisterWindGenerator(UWindGeneratorComponent* WindGenerator);
     void UnregisterWindGenerator(UWindGeneratorComponent* WindGenerator);
 
+    void RegisterWindGridCenter(AActor* GridCenter);
+    void UnregisterWindGridCenter(AActor* GridCenter);
+    FVector GetGridCenter() const;
+
     void RegisterWindZone(UWindZoneVolumeComponent* Modifier);
     void UnregisterWindZone(UWindZoneVolumeComponent* Modifier);
 
@@ -38,13 +42,16 @@ public:
     AWindSystemActor* GetWindSystemActor() const { return WindSystemActor; }
 
 private:
-    UPROPERTY()
+    // UPROPERY()
+    AActor* WindGridCenter;
+
+    // UPROPERTY()
     TArray<UWindZoneVolumeComponent*> WindZones;
 
-    UPROPERTY()
+    // UPROPERTY()
     AWindSystemActor* WindSystemActor;
 
-    UPROPERTY()
+    // UPROPERTY()
     TArray<UWindGeneratorComponent*> WindGenerators;
     FCriticalSection GeneratorsLock;
 
