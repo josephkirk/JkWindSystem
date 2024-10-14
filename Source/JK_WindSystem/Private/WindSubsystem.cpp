@@ -2,6 +2,7 @@
 #include "WindSystemActor.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "WindZoneVolumeComponent.h"
 
 UWindSimulationSubsystem::UWindSimulationSubsystem()
     : WindSystemActor(nullptr)
@@ -53,7 +54,12 @@ FVector UWindSimulationSubsystem::GetWindVelocityAtLocation(const FVector& World
 {
     if (WindSystemActor && WindSystemActor->WindSimulationComponent)
     {
-        return WindSystemActor->WindSimulationComponent->GetWindVelocityAtLocation(WorldLocation);
+        FVector WindVelocity = WindSystemActor->WindSimulationComponent->GetWindVelocityAtLocation(WorldLocation);
+        for (const UWindZoneVolumeComponent* Modifier : WindZones)
+        {
+            WindVelocity = Modifier->ModifyWindVelocity(WindVelocity, WorldLocation);
+        }
+        return WindVelocity;
     }
     return FVector::ZeroVector;
 }
@@ -76,6 +82,16 @@ void UWindSimulationSubsystem::UnregisterWindGenerator(UWindGeneratorComponent* 
 {
     FScopeLock Lock(&GeneratorsLock);
     WindGenerators.Remove(WindGenerator);
+}
+
+void UWindSimulationSubsystem::RegisterWindZone(UWindZoneVolumeComponent* Modifier)
+{
+    WindZones.AddUnique(Modifier);
+}
+
+void UWindSimulationSubsystem::UnregisterWindZone(UWindZoneVolumeComponent* Modifier)
+{
+    WindZones.Remove(Modifier);
 }
 
 void UWindSimulationSubsystem::UpdateWindGenerators(float DeltaTime)

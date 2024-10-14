@@ -7,7 +7,7 @@
 
 class AWindSystemActor;
 class UWindGeneratorComponent;
-
+class UWindZoneVolumeComponent;
 UCLASS()
 class JK_WINDSYSTEM_API UWindSimulationSubsystem : public UWorldSubsystem
 {
@@ -31,13 +31,20 @@ public:
     void RegisterWindGenerator(UWindGeneratorComponent* WindGenerator);
     void UnregisterWindGenerator(UWindGeneratorComponent* WindGenerator);
 
+    void RegisterWindZone(UWindZoneVolumeComponent* Modifier);
+    void UnregisterWindZone(UWindZoneVolumeComponent* Modifier);
+
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
     AWindSystemActor* GetWindSystemActor() const { return WindSystemActor; }
 
 private:
     UPROPERTY()
+    TArray<UWindZoneVolumeComponent*> WindZones;
+
+    UPROPERTY()
     AWindSystemActor* WindSystemActor;
 
+    UPROPERTY()
     TArray<UWindGeneratorComponent*> WindGenerators;
     FCriticalSection GeneratorsLock;
 
