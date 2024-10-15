@@ -11,10 +11,11 @@
 #include "WindSystemComponent.generated.h"
 
 class UWindSimulationComponent;
+class UWindGPUSimulationComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnWindCellUpdated, const FVector&, CellCenter, const FVector&, WindVelocity, float, CellSize);
 
-class FWindGrid
+class JK_WINDSYSTEM_API FWindGrid
 {
 public:
     FWindGrid(int32 Size, float InCellSize);
@@ -91,7 +92,7 @@ public:
     float GetMaxAllowedWindVelocity() const;
 
     void UpdateGridCenter(const FVector& NewCenter);
-private:
+protected:
     TSharedPtr<FWindGrid> WindGrid;
     TSharedPtr<FWindGrid> TempGrid;
     float Viscosity;
@@ -112,11 +113,16 @@ private:
     bool bIsBroadcasting = false;
 
     const UWindSystemSettings* GetSettings() const;
-    void SwapGrids();
-    void BroadcastWindUpdates();
-    void HandleGridMovement();
-    void InitializeGrid();
+
     bool IsGridInitialized() const { return WindGrid != nullptr; }
+private:
+    
+
+    void InitializeGrid();
+    void SwapGrids();
+    void HandleGridMovement();
+    
+    
     void Diffuse(TSharedPtr<FWindGrid> Dst, const TSharedPtr<FWindGrid> Src, float Diff, float Dt);
     void Project(TSharedPtr<FWindGrid> Velocity, TSharedPtr<FWindGrid> P, TSharedPtr<FWindGrid> Div);
     void SetBoundary(TSharedPtr<FWindGrid> Field);

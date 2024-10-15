@@ -1,10 +1,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "WindSimulationComponent.h"
+#include "WindSystemComponent.h"
 #include "RHI.h"
 #include "RHIResources.h"
+#include "RenderGraphResources.h"
+#include "WindSystemCommon.h"
 #include "WindSystemGPUComponent.generated.h"
+
+#define MAX_GRID_SIZE 128 // Adjust this value as needed
 
 UCLASS()
 class JK_WINDSYSTEM_API UWindGPUSimulationComponent : public UWindSimulationComponent
@@ -19,17 +23,22 @@ public:
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
     virtual void SimulationStep(float DeltaTime) override;
 
-private:
 
-    FStructuredBufferRHIRef WindGridBuffer;
-    FUnorderedAccessViewRHIRef WindGridUAV;
-    FShaderResourceViewRHIRef WindGridSRV;
+    virtual FVector GetWindVelocityAtLocation(const FVector& Location) const override;
+
+    virtual void AddWindAtLocation(const FVector& Location, const FVector& WindVelocity) override;
+
+private:
+    FTexture3DRHIRef VelocityFieldTexture;
+    FRHIUnorderedAccessView* VelocityFieldUAV;
+    FRHIShaderResourceView* VelocityFieldSRV;
+
+    float GridUpdateInterval;
+    float TimeSinceLastGridUpdate;
 
     void InitializeGPUResources();
     void ReleaseGPUResources();
-    void DispatchComputeShader(FRHICommandList& RHICmdList);
-
+    void DispatchComputeShader(FRHICommandListImmediate& RHICmdList);
+    void UpdateGPUTexture(int32 X, int32 Y, int32 Z, const FVector& Velocity);
     void UpdateGridFromGPU();
-    float TimeSinceLastGridUpdate;
-    float GridUpdateInterval;
-}
+};
