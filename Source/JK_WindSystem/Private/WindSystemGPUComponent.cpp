@@ -199,9 +199,6 @@ void UWindGPUSimulationComponent::InitializeGPUResources()
 
     GraphBuilder.Execute();
 
-    //VelocityFieldTexture = RDGVelocityFieldTexture->GetRHI();
-    //VelocityFieldUAV = RHICmdList.CreateUnorderedAccessView(VelocityFieldTexture);
-    //VelocityFieldSRV = RHICmdList.CreateShaderResourceView(FRHIShaderResourceViewCreateInfo(VelocityFieldTexture));
     VelocityFieldTexture = RDGVelocityFieldTexture->GetRHI();
     VelocityFieldUAV = RHICmdList.CreateUnorderedAccessView(VelocityFieldTexture, 0);
 
