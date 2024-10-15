@@ -34,8 +34,8 @@ private:
     int32 GridSize;
     float CellSize;
 
-    int32 GetIndex(int32 X, int32 Y, int32 Z) const;
-    bool IsValidIndex(int32 X, int32 Y, int32 Z) const;
+    FORCEINLINE int32 GetIndex(int32 X, int32 Y, int32 Z) const;
+    FORCEINLINE bool IsValidIndex(int32 X, int32 Y, int32 Z) const;
 
 friend UWindSimulationComponent;
 };
@@ -65,10 +65,10 @@ public:
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
-    FVector GetWindVelocityAtLocation(const FVector& Location) const;
+    virtual FVector GetWindVelocityAtLocation(const FVector& Location) const;
 
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
-    void AddWindAtLocation(const FVector& Location, const FVector& WindVelocity);
+    virtual void AddWindAtLocation(const FVector& Location, const FVector& WindVelocity);
 
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
     float GetSimulationFrequency() const { return SimulationFrequency; }
@@ -79,7 +79,7 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
     float GetCellSize() const { return CellSize; }
 
-    void SimulationStep(float DeltaTime);
+    void virtual SimulationStep(float DeltaTime);
 
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation|Testing")
     void InitializeForTesting();

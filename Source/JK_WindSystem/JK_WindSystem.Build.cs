@@ -41,7 +41,8 @@ public class JK_WindSystem : ModuleRules
 				"Engine",
 				"Slate",
 				"SlateCore",
-				"UnrealEd"
+				"UnrealEd",
+				"RHI"
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);
