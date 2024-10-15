@@ -1,9 +1,14 @@
 #include "WindSystemGPUComponent.h"
-#include "ShaderCompilerCore.h"
-#include "GlobalShader.h"
-#include "ShaderParameterStruct.h"
 #include "RenderGraphBuilder.h"
 #include "RenderGraphUtils.h"
+#include "ShaderParameterStruct.h"
+#include "GlobalShader.h"
+#include "RHICommandList.h"
+#include "RHIResources.h"
+#include "ShaderCompilerCore.h"
+#include "RHIDefinitions.h"
+#include "RHIStaticStates.h"
+#include "DataDrivenShaderPlatformInfo.h"
 
 class FWindSimulationCS : public FGlobalShader
 {
@@ -11,7 +16,7 @@ class FWindSimulationCS : public FGlobalShader
     SHADER_USE_PARAMETER_STRUCT(FWindSimulationCS, FGlobalShader);
 
     BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
-        SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<FVector4f>, WindGrid)
+        SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture3D<float4>, WindGrid)
         SHADER_PARAMETER(float, DeltaTime)
         SHADER_PARAMETER(float, Viscosity)
         SHADER_PARAMETER(FIntVector, GridSize)
@@ -29,10 +34,6 @@ IMPLEMENT_GLOBAL_SHADER(FWindSimulationCS, "/Plugin/JK_WindSystem/Private/WindSi
 UWindGPUSimulationComponent::UWindGPUSimulationComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
-    GridSize = GetSettings()->GridSize; // Default value
-    CellSize = GetSettings()->CellSize; // Default value
-    Viscosity = GetSettings()->Viscosity;
-    SimulationFrequency = GetSettings()->SimulationFrequency;
     bAutoActivate = true;
     GridUpdateInterval = 1.0f / 30.0f; // Update 30 times per second, adjust as needed
     TimeSinceLastGridUpdate = 0.0f;
@@ -93,7 +94,11 @@ void UWindGPUSimulationComponent::AddWindAtLocation(const FVector& Location, con
         return;
     }
 
-    // ... existing validation code ...
+    if (!IsVectorFinite(WindVelocity))
+    {
+        WINDSYSTEM_LOG_ERROR(TEXT("Invalid wind velocity provided: %s"), *WindVelocity.ToString());
+        return;
+    }
 
     FVector LocalPos = Location - GridCenter;
     FVector GridPos = LocalPos / CellSize;
@@ -130,18 +135,21 @@ void UWindGPUSimulationComponent::AddWindAtLocation(const FVector& Location, con
 
 void UWindGPUSimulationComponent::UpdateGPUTexture(int32 X, int32 Y, int32 Z, const FVector& Velocity)
 {
-    ENQUEUE_RENDER_COMMAND(UpdateWindVelocity)(
-        [this, X, Y, Z, Velocity](FRHICommandListImmediate& RHICmdList)
-        {
-            int32 Size = WindGrid->GetSize();
-            uint32 SrcPitch, SlicePitch;
-            FFloat16Color* Data = (FFloat16Color*)RHILockTexture3D(VelocityFieldTexture, 0, RLM_WriteOnly, SrcPitch, SlicePitch, 1, 1, 1, X, Y, Z);
-            
-            *Data = FFloat16Color(Velocity.X, Velocity.Y, Velocity.Z, 0.0f);
+    FRHICommandListImmediate& RHICmdList = FRHICommandListExecutor::GetImmediateCommandList();
 
-            RHIUnlockTexture3D(VelocityFieldTexture, 0, Z);
-        }
+    FFloat16Color ColorData;
+    ColorData.R = Velocity.X;
+    ColorData.G = Velocity.Y;
+    ColorData.B = Velocity.Z;
+    ColorData.A = 0.0f;
+
+    FUpdateTextureRegion3D UpdateRegion(
+        X, Y, Z,
+        0, 0, 0,
+        1, 1, 1
     );
+
+    RHICmdList.UpdateTexture3D(VelocityFieldTexture, 0, UpdateRegion, sizeof(FFloat16Color), sizeof(FFloat16Color), (uint8*)&ColorData);
 }
 
 void UWindGPUSimulationComponent::UpdateGridFromGPU()
@@ -158,57 +166,73 @@ void UWindGPUSimulationComponent::UpdateGridFromGPU()
             int32 Size = WindGrid->GetSize();
             TArray<FVector>& GridData = WindGrid->GetGridData();
 
-            // Read data from GPU
-            uint32 SrcPitch, SlicePitch;
-            FFloat16Color* Data = (FFloat16Color*)RHILockTexture3D(VelocityFieldTexture, 0, RLM_ReadOnly, SrcPitch, SlicePitch, Size, Size, Size);
+            FTexture3DRHIRef LocalVelocityFieldTexture = VelocityFieldTexture;
+
+            TArray<FLinearColor> ColorData;
+            ColorData.SetNum(Size * Size * Size);
+
+            FReadSurfaceDataFlags ReadFlags(RCM_MinMax);
+            RHICmdList.ReadSurfaceData(LocalVelocityFieldTexture, FIntRect(0, 0, Size, Size), ColorData, ReadFlags);
 
             // Copy data to CPU grid
-            for (int32 Z = 0; Z < Size; ++Z)
+            for (int32 Index = 0; Index < GridData.Num(); ++Index)
             {
-                for (int32 Y = 0; Y < Size; ++Y)
-                {
-                    for (int32 X = 0; X < Size; ++X)
-                    {
-                        int32 Index = X + Y * Size + Z * Size * Size;
-                        GridData[Index] = FVector(Data[Index].R, Data[Index].G, Data[Index].B);
-                    }
-                }
+                GridData[Index] = FVector(ColorData[Index].R, ColorData[Index].G, ColorData[Index].B);
             }
-
-            RHIUnlockTexture3D(VelocityFieldTexture, 0, 0);
         }
     );
 }
 
 void UWindGPUSimulationComponent::InitializeGPUResources()
 {
-    FRHIResourceCreateInfo CreateInfo;
-    WindGridBuffer = RHICreateStructuredBuffer(sizeof(FVector4f), GridSize * GridSize * GridSize * sizeof(FVector4f), BUF_UnorderedAccess | BUF_ShaderResource, CreateInfo);
-    WindGridUAV = RHICreateUnorderedAccessView(WindGridBuffer, false, false);
-    WindGridSRV = RHICreateShaderResourceView(WindGridBuffer, sizeof(FVector4f), PF_A32B32G32R32F);
+    FRHICommandListImmediate& RHICmdList = FRHICommandListExecutor::GetImmediateCommandList();
+    FRDGBuilder GraphBuilder(RHICmdList);
+
+    FRDGTextureDesc Desc = FRDGTextureDesc::Create3D(
+        FIntVector(MAX_GRID_SIZE, MAX_GRID_SIZE, MAX_GRID_SIZE),
+        PF_FloatRGBA,
+        FClearValueBinding::Black,
+        TexCreate_ShaderResource | TexCreate_UAV
+    );
+
+    FRDGTexture* RDGVelocityFieldTexture = GraphBuilder.CreateTexture(Desc, TEXT("VelocityFieldTexture"));
+
+    GraphBuilder.Execute();
+
+    //VelocityFieldTexture = RDGVelocityFieldTexture->GetRHI();
+    //VelocityFieldUAV = RHICmdList.CreateUnorderedAccessView(VelocityFieldTexture);
+    //VelocityFieldSRV = RHICmdList.CreateShaderResourceView(FRHIShaderResourceViewCreateInfo(VelocityFieldTexture));
+    VelocityFieldTexture = RDGVelocityFieldTexture->GetRHI();
+    VelocityFieldUAV = RHICmdList.CreateUnorderedAccessView(VelocityFieldTexture, 0);
+
+    FRHITextureSRVCreateInfo SRVCreateInfo;
+    SRVCreateInfo.NumMipLevels = 1;
+    VelocityFieldSRV = RHICmdList.CreateShaderResourceView(VelocityFieldTexture, SRVCreateInfo);
 }
 
-void UWindGPUSimulationComponent::ReleaseGPUResources()
+void UWindGPUSimulationComponent::DispatchComputeShader(FRHICommandListImmediate& RHICmdList)
 {
-    WindGridBuffer.SafeRelease();
-    WindGridUAV.SafeRelease();
-    WindGridSRV.SafeRelease();
-}
+    FRDGBuilder GraphBuilder(RHICmdList);
 
-void UWindGPUSimulationComponent::DispatchComputeShader(FRHICommandList& RHICmdList)
-{
     TShaderMapRef<FWindSimulationCS> ComputeShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
 
-    FWindSimulationCS::FParameters Parameters;
-    Parameters.WindGrid = WindGridUAV;
-    Parameters.DeltaTime = 1.0f / SimulationFrequency;
-    Parameters.Viscosity = Viscosity;
-    Parameters.GridSize = FIntVector(GridSize, GridSize, GridSize);
+    FWindSimulationCS::FParameters* Parameters = GraphBuilder.AllocParameters<FWindSimulationCS::FParameters>();
+    Parameters->WindGrid = GraphBuilder.CreateUAV(GraphBuilder.RegisterExternalTexture(CreateRenderTarget(VelocityFieldTexture, TEXT("WindGrid"))));
+    Parameters->DeltaTime = 1.0f / SimulationFrequency;
+    Parameters->Viscosity = Viscosity;
+    Parameters->GridSize = FIntVector(GridSize, GridSize, GridSize);
 
-    FComputeShaderUtils::Dispatch(RHICmdList, ComputeShader, Parameters,
+    FComputeShaderUtils::AddPass(
+        GraphBuilder,
+        RDG_EVENT_NAME("WindSimulation"),
+        ComputeShader,
+        Parameters,
         FIntVector(FMath::DivideAndRoundUp(GridSize, 8),
-                   FMath::DivideAndRoundUp(GridSize, 8),
-                   FMath::DivideAndRoundUp(GridSize, 8)));
+            FMath::DivideAndRoundUp(GridSize, 8),
+            FMath::DivideAndRoundUp(GridSize, 8))
+    );
+
+    GraphBuilder.Execute();
 }
 
 void UWindGPUSimulationComponent::SimulationStep(float DeltaTime)
@@ -219,4 +243,19 @@ void UWindGPUSimulationComponent::SimulationStep(float DeltaTime)
             DispatchComputeShader(RHICmdList);
         }
     );
+}
+
+void UWindGPUSimulationComponent::ReleaseGPUResources()
+{
+    if (VelocityFieldUAV)
+    {
+        VelocityFieldUAV->Release();
+        VelocityFieldUAV = nullptr;
+    }
+    if (VelocityFieldSRV)
+    {
+        VelocityFieldSRV->Release();
+        VelocityFieldSRV = nullptr;
+    }
+    VelocityFieldTexture.SafeRelease();
 }
