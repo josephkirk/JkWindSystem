@@ -16,10 +16,15 @@ class FWindSimulationCS : public FGlobalShader
     SHADER_USE_PARAMETER_STRUCT(FWindSimulationCS, FGlobalShader);
 
     BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
-        SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture3D<float4>, WindGrid)
+        SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture3D<float4>, VelocityField)
+        SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture3D<float>, DensityField)
+        SHADER_PARAMETER_SRV(Texture3D<float4>, PrevVelocityField)
+        SHADER_PARAMETER_SRV(Texture3D<float>, PrevDensityField)
         SHADER_PARAMETER(float, DeltaTime)
         SHADER_PARAMETER(float, Viscosity)
+        SHADER_PARAMETER(float, Diffusion)
         SHADER_PARAMETER(FIntVector, GridSize)
+        SHADER_PARAMETER(int32, SimulationStep)
     END_SHADER_PARAMETER_STRUCT()
 
     static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
@@ -35,31 +40,29 @@ UWindGPUSimulationComponent::UWindGPUSimulationComponent()
 {
     PrimaryComponentTick.bCanEverTick = true;
     bAutoActivate = true;
-    GridUpdateInterval = 1.0f / 30.0f; // Update 30 times per second, adjust as needed
+    GridUpdateInterval = 1.0f / 30.0f; // Update 60 times per second
     TimeSinceLastGridUpdate = 0.0f;
 }
 
 void UWindGPUSimulationComponent::BeginPlay()
 {
     Super::BeginPlay();
-
     InitializeGPUResources();
 }
 
 void UWindGPUSimulationComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     ReleaseGPUResources();
-
     Super::EndPlay(EndPlayReason);
 }
 
 void UWindGPUSimulationComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-    // Update Grid From GPU Compute
     TimeSinceLastGridUpdate += DeltaTime;
     if (TimeSinceLastGridUpdate >= GridUpdateInterval)
     {
+        SimulationStep(TimeSinceLastGridUpdate);
         UpdateGridFromGPU();
         TimeSinceLastGridUpdate = 0.0f;
     }
@@ -76,7 +79,7 @@ FVector UWindGPUSimulationComponent::GetWindVelocityAtLocation(const FVector& Lo
     }
 
     FVector LocalPos = Location - GridCenter;
-    FVector GridPos = LocalPos / WindGrid->GetCellSize();
+    FVector GridPos = LocalPos / CellSize;
 
     return WindGrid->GetCell(
         FMath::FloorToInt(GridPos.X),
@@ -112,8 +115,8 @@ void UWindGPUSimulationComponent::AddWindAtLocation(const FVector& Location, con
     {
         FVector CurrentVelocity = WindGrid->GetCell(X, Y, Z);
         FVector NewVelocity = CurrentVelocity + WindVelocity;
-        
-        // Clamp the new velocity to prevent extreme values
+
+        // Clamp the new velocity to prevent extreme values    
         if (NewVelocity.SizeSquared() > FMath::Square(GetMaxAllowedWindVelocity()))
         {
             NewVelocity = NewVelocity.GetSafeNormal() * GetMaxAllowedWindVelocity();
@@ -122,7 +125,7 @@ void UWindGPUSimulationComponent::AddWindAtLocation(const FVector& Location, con
         WindGrid->SetCell(X, Y, Z, NewVelocity);
 
         // Also update the GPU texture
-        UpdateGPUTexture(X, Y, Z, NewVelocity);
+        UpdateGPUTexture(X, Y, Z, NewVelocity, 1.0f);
 
         WINDSYSTEM_LOG_VERBOSE(TEXT("Wind added at location: Pos=%s, NewVelocity=%s"), 
             *Location.ToString(), *NewVelocity.ToString());
@@ -133,23 +136,22 @@ void UWindGPUSimulationComponent::AddWindAtLocation(const FVector& Location, con
     }
 }
 
-void UWindGPUSimulationComponent::UpdateGPUTexture(int32 X, int32 Y, int32 Z, const FVector& Velocity)
+void UWindGPUSimulationComponent::UpdateGPUTexture(int32 X, int32 Y, int32 Z, const FVector& Velocity, float Density)
 {
     FRHICommandListImmediate& RHICmdList = FRHICommandListExecutor::GetImmediateCommandList();
 
-    FFloat16Color ColorData;
-    ColorData.R = Velocity.X;
-    ColorData.G = Velocity.Y;
-    ColorData.B = Velocity.Z;
-    ColorData.A = 0.0f;
+    FFloat16Color VelocityData;
+    VelocityData.R = Velocity.X;
+    VelocityData.G = Velocity.Y;
+    VelocityData.B = Velocity.Z;
+    VelocityData.A = 0.0f;
 
-    FUpdateTextureRegion3D UpdateRegion(
-        X, Y, Z,
-        0, 0, 0,
-        1, 1, 1
-    );
+    FUpdateTextureRegion3D UpdateRegion(X, Y, Z, 0, 0, 0, 1, 1, 1);
 
-    RHICmdList.UpdateTexture3D(VelocityFieldTexture, 0, UpdateRegion, sizeof(FFloat16Color), sizeof(FFloat16Color), (uint8*)&ColorData);
+    RHICmdList.UpdateTexture3D(VelocityFieldTexture, 0, UpdateRegion, sizeof(FFloat16Color), sizeof(FFloat16Color), (uint8*)&VelocityData);
+    
+    float DensityData = Density;
+    RHICmdList.UpdateTexture3D(DensityFieldTexture, 0, UpdateRegion, sizeof(float), sizeof(float), (uint8*)&DensityData);
 }
 
 void UWindGPUSimulationComponent::UpdateGridFromGPU()
@@ -166,13 +168,12 @@ void UWindGPUSimulationComponent::UpdateGridFromGPU()
             int32 Size = WindGrid->GetSize();
             TArray<FVector>& GridData = WindGrid->GetGridData();
 
-            FTexture3DRHIRef LocalVelocityFieldTexture = VelocityFieldTexture;
-
+            // FTexture3DRHIRef LocalVelocityFieldTexture = VelocityFieldTexture;
             TArray<FLinearColor> ColorData;
             ColorData.SetNum(Size * Size * Size);
 
             FReadSurfaceDataFlags ReadFlags(RCM_MinMax);
-            RHICmdList.ReadSurfaceData(LocalVelocityFieldTexture, FIntRect(0, 0, Size, Size), ColorData, ReadFlags);
+            RHICmdList.ReadSurfaceData(VelocityFieldTexture, FIntRect(0, 0, Size, Size), ColorData, ReadFlags);
 
             // Copy data to CPU grid
             for (int32 Index = 0; Index < GridData.Num(); ++Index)
@@ -188,46 +189,71 @@ void UWindGPUSimulationComponent::InitializeGPUResources()
     FRHICommandListImmediate& RHICmdList = FRHICommandListExecutor::GetImmediateCommandList();
     FRDGBuilder GraphBuilder(RHICmdList);
 
-    FRDGTextureDesc Desc = FRDGTextureDesc::Create3D(
-        FIntVector(MAX_GRID_SIZE, MAX_GRID_SIZE, MAX_GRID_SIZE),
+    FRDGTextureDesc VelocityDesc = FRDGTextureDesc::Create3D(
+        FIntVector(GridSize, GridSize, GridSize),
         PF_FloatRGBA,
         FClearValueBinding::Black,
         TexCreate_ShaderResource | TexCreate_UAV
     );
 
-    FRDGTexture* RDGVelocityFieldTexture = GraphBuilder.CreateTexture(Desc, TEXT("VelocityFieldTexture"));
+    FRDGTextureDesc DensityDesc = FRDGTextureDesc::Create3D(
+        FIntVector(GridSize, GridSize, GridSize),
+        PF_R32_FLOAT,
+        FClearValueBinding::Black,
+        TexCreate_ShaderResource | TexCreate_UAV
+    );
+
+    FRDGTexture* RDGVelocityFieldTexture = GraphBuilder.CreateTexture(VelocityDesc, TEXT("VelocityFieldTexture"));
+    FRDGTexture* RDGDensityFieldTexture = GraphBuilder.CreateTexture(DensityDesc, TEXT("DensityFieldTexture"));
 
     GraphBuilder.Execute();
 
     VelocityFieldTexture = RDGVelocityFieldTexture->GetRHI();
-    VelocityFieldUAV = RHICmdList.CreateUnorderedAccessView(VelocityFieldTexture, 0);
+    DensityFieldTexture = RDGDensityFieldTexture->GetRHI();
 
-    FRHITextureSRVCreateInfo SRVCreateInfo;
-    SRVCreateInfo.NumMipLevels = 1;
-    VelocityFieldSRV = RHICmdList.CreateShaderResourceView(VelocityFieldTexture, SRVCreateInfo);
+    VelocityFieldUAV = RHICmdList.CreateUnorderedAccessView(VelocityFieldTexture, 0);
+    DensityFieldUAV = RHICmdList.CreateUnorderedAccessView(DensityFieldTexture, 0);
+
+    FRHITextureSRVCreateInfo VelocitySRVCreateInfo;
+    VelocitySRVCreateInfo.NumMipLevels = 1;
+    VelocityFieldSRV = RHICmdList.CreateShaderResourceView(VelocityFieldTexture, VelocitySRVCreateInfo);
+
+    FRHITextureSRVCreateInfo DensitySRVCreateInfo;
+    DensitySRVCreateInfo.NumMipLevels = 1;
+    DensityFieldSRV = RHICmdList.CreateShaderResourceView(DensityFieldTexture, DensitySRVCreateInfo);
 }
 
-void UWindGPUSimulationComponent::DispatchComputeShader(FRHICommandListImmediate& RHICmdList)
+void UWindGPUSimulationComponent::DispatchComputeShader(FRHICommandListImmediate& RHICmdList, float DeltaTime)
 {
     FRDGBuilder GraphBuilder(RHICmdList);
 
     TShaderMapRef<FWindSimulationCS> ComputeShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
 
     FWindSimulationCS::FParameters* Parameters = GraphBuilder.AllocParameters<FWindSimulationCS::FParameters>();
-    Parameters->WindGrid = GraphBuilder.CreateUAV(GraphBuilder.RegisterExternalTexture(CreateRenderTarget(VelocityFieldTexture, TEXT("WindGrid"))));
-    Parameters->DeltaTime = 1.0f / SimulationFrequency;
+    Parameters->VelocityField = GraphBuilder.CreateUAV(GraphBuilder.RegisterExternalTexture(CreateRenderTarget(VelocityFieldTexture, TEXT("VelocityField"))));
+    Parameters->DensityField = GraphBuilder.CreateUAV(GraphBuilder.RegisterExternalTexture(CreateRenderTarget(DensityFieldTexture, TEXT("DensityField"))));
+    Parameters->PrevVelocityField = VelocityFieldSRV;
+    Parameters->PrevDensityField = DensityFieldSRV;
+    Parameters->DeltaTime = DeltaTime;
     Parameters->Viscosity = Viscosity;
+    Parameters->Diffusion = 0.1f; // Adjust as needed
     Parameters->GridSize = FIntVector(GridSize, GridSize, GridSize);
 
-    FComputeShaderUtils::AddPass(
-        GraphBuilder,
-        RDG_EVENT_NAME("WindSimulation"),
-        ComputeShader,
-        Parameters,
-        FIntVector(FMath::DivideAndRoundUp(GridSize, 8),
-            FMath::DivideAndRoundUp(GridSize, 8),
-            FMath::DivideAndRoundUp(GridSize, 8))
-    );
+    // Perform multiple simulation steps
+    for (int32 Step = 0; Step < 4; ++Step)
+    {
+        Parameters->SimulationStep = Step;
+
+        FComputeShaderUtils::AddPass(
+            GraphBuilder,
+            RDG_EVENT_NAME("WindSimulation"),
+            ComputeShader,
+            Parameters,
+            FIntVector(FMath::DivideAndRoundUp(GridSize, 8),
+                FMath::DivideAndRoundUp(GridSize, 8),
+                FMath::DivideAndRoundUp(GridSize, 8))
+        );
+    }
 
     GraphBuilder.Execute();
 }
@@ -235,9 +261,9 @@ void UWindGPUSimulationComponent::DispatchComputeShader(FRHICommandListImmediate
 void UWindGPUSimulationComponent::SimulationStep(float DeltaTime)
 {
     ENQUEUE_RENDER_COMMAND(WindSimulationStep)(
-        [this](FRHICommandListImmediate& RHICmdList)
+        [this, DeltaTime](FRHICommandListImmediate& RHICmdList)
         {
-            DispatchComputeShader(RHICmdList);
+            DispatchComputeShader(RHICmdList, DeltaTime);
         }
     );
 }
@@ -249,10 +275,21 @@ void UWindGPUSimulationComponent::ReleaseGPUResources()
         VelocityFieldUAV->Release();
         VelocityFieldUAV = nullptr;
     }
+    if (DensityFieldUAV)
+    {
+        DensityFieldUAV->Release();
+        DensityFieldUAV = nullptr;
+    }
     if (VelocityFieldSRV)
     {
         VelocityFieldSRV->Release();
         VelocityFieldSRV = nullptr;
     }
+    if (DensityFieldSRV)
+    {
+        DensityFieldSRV->Release();
+        DensityFieldSRV = nullptr;
+    }
     VelocityFieldTexture.SafeRelease();
+    DensityFieldTexture.SafeRelease();
 }

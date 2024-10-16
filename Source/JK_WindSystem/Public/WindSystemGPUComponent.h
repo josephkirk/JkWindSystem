@@ -23,22 +23,23 @@ public:
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
     virtual void SimulationStep(float DeltaTime) override;
 
-
     virtual FVector GetWindVelocityAtLocation(const FVector& Location) const override;
-
     virtual void AddWindAtLocation(const FVector& Location, const FVector& WindVelocity) override;
 
 private:
     FTexture3DRHIRef VelocityFieldTexture;
+    FTexture3DRHIRef DensityFieldTexture;
     FRHIUnorderedAccessView* VelocityFieldUAV;
+    FRHIUnorderedAccessView* DensityFieldUAV;
     FRHIShaderResourceView* VelocityFieldSRV;
+    FRHIShaderResourceView* DensityFieldSRV;
 
     float GridUpdateInterval;
     float TimeSinceLastGridUpdate;
 
     void InitializeGPUResources();
     void ReleaseGPUResources();
-    void DispatchComputeShader(FRHICommandListImmediate& RHICmdList);
-    void UpdateGPUTexture(int32 X, int32 Y, int32 Z, const FVector& Velocity);
+    void DispatchComputeShader(FRHICommandListImmediate& RHICmdList, float DeltaTime);
+    void UpdateGPUTexture(int32 X, int32 Y, int32 Z, const FVector& Velocity, float Density);
     void UpdateGridFromGPU();
 };

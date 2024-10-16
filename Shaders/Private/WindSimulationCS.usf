@@ -1,0 +1,161 @@
+#include "/Engine/Public/Platform.ush"
+
+RWTexture3D<float4> VelocityField;
+RWTexture3D<float> DensityField;
+Texture3D<float4> PrevVelocityField;
+Texture3D<float> PrevDensityField;
+float DeltaTime;
+float Viscosity;
+float Diffusion;
+uint3 GridSize;
+int SimulationStep;
+
+#define THREADS_PER_GROUP 8
+
+groupshared float4 SharedVelocity[THREADS_PER_GROUP * THREADS_PER_GROUP * THREADS_PER_GROUP];
+groupshared float SharedDensity[THREADS_PER_GROUP * THREADS_PER_GROUP * THREADS_PER_GROUP];
+
+uint FlattenIndex(uint3 id)
+{
+    return id.x + id.y * THREADS_PER_GROUP + id.z * THREADS_PER_GROUP * THREADS_PER_GROUP;
+}
+
+void Diffuse(uint3 DTid, uint3 GTid)
+{
+    uint flatIndex = FlattenIndex(GTid);
+    float4 velocity = PrevVelocityField[DTid];
+    float density = PrevDensityField[DTid];
+
+    SharedVelocity[flatIndex] = velocity;
+    SharedDensity[flatIndex] = density;
+    GroupMemoryBarrierWithGroupSync();
+
+    if (all(GTid > 0) && all(GTid < THREADS_PER_GROUP - 1))
+    {
+        float a = DeltaTime * Viscosity * GridSize.x * GridSize.y * GridSize.z;
+        float4 velocitySum = 0;
+        float densitySum = 0;
+
+        [unroll]
+        for (int i = -1; i <= 1; ++i)
+        {
+            [unroll]
+            for (int j = -1; j <= 1; ++j)
+            {
+                [unroll]
+                for (int k = -1; k <= 1; ++k)
+                {
+                    uint3 neighborId = GTid + uint3(i, j, k);
+                    uint neighborIndex = FlattenIndex(neighborId);
+                    velocitySum += SharedVelocity[neighborIndex];
+                    densitySum += SharedDensity[neighborIndex];
+                }
+            }
+        }
+
+        velocity = (velocity + a * velocitySum) / (1 + 26 * a);
+        density = (density + Diffusion * DeltaTime * densitySum) / (1 + 26 * Diffusion * DeltaTime);
+    }
+
+    VelocityField[DTid] = velocity;
+    DensityField[DTid] = density;
+}
+
+void Advect(uint3 DTid)
+{
+    float3 pos = DTid - DeltaTime * VelocityField[DTid].xyz;
+    pos = clamp(pos, 0, GridSize - 1);
+
+    uint3 i0 = (uint3)pos;
+    uint3 i1 = i0 + 1;
+    float3 f = pos - i0;
+
+    float4 v000 = PrevVelocityField[i0];
+    float4 v100 = PrevVelocityField[uint3(i1.x, i0.y, i0.z)];
+    float4 v010 = PrevVelocityField[uint3(i0.x, i1.y, i0.z)];
+    float4 v110 = PrevVelocityField[uint3(i1.x, i1.y, i0.z)];
+    float4 v001 = PrevVelocityField[uint3(i0.x, i0.y, i1.z)];
+    float4 v101 = PrevVelocityField[uint3(i1.x, i0.y, i1.z)];
+    float4 v011 = PrevVelocityField[uint3(i0.x, i1.y, i1.z)];
+    float4 v111 = PrevVelocityField[uint3(i1.x, i1.y, i1.z)];
+
+    VelocityField[DTid] = lerp(
+        lerp(lerp(v000, v100, f.x), lerp(v010, v110, f.x), f.y),
+        lerp(lerp(v001, v101, f.x), lerp(v011, v111, f.x), f.y),
+        f.z
+    );
+
+    float d000 = PrevDensityField[i0];
+    float d100 = PrevDensityField[uint3(i1.x, i0.y, i0.z)];
+    float d010 = PrevDensityField[uint3(i0.x, i1.y, i0.z)];
+    float d110 = PrevDensityField[uint3(i1.x, i1.y, i0.z)];
+    float d001 = PrevDensityField[uint3(i0.x, i0.y, i1.z)];
+    float d101 = PrevDensityField[uint3(i1.x, i0.y, i1.z)];
+    float d011 = PrevDensityField[uint3(i0.x, i1.y, i1.z)];
+    float d111 = PrevDensityField[uint3(i1.x, i1.y, i1.z)];
+
+    DensityField[DTid] = lerp(
+        lerp(lerp(d000, d100, f.x), lerp(d010, d110, f.x), f.y),
+        lerp(lerp(d001, d101, f.x), lerp(d011, d111, f.x), f.y),
+        f.z
+    );
+}
+
+void Project(uint3 DTid)
+{
+    float3 h = 1.0 / GridSize;
+    float3 halfrdx = 0.5 * h;
+
+    float div = halfrdx.x * (VelocityField[uint3(DTid.x + 1, DTid.y, DTid.z)].x - VelocityField[uint3(DTid.x - 1, DTid.y, DTid.z)].x) +
+                halfrdx.y * (VelocityField[uint3(DTid.x, DTid.y + 1, DTid.z)].y - VelocityField[uint3(DTid.x, DTid.y - 1, DTid.z)].y) +
+                halfrdx.z * (VelocityField[uint3(DTid.x, DTid.y, DTid.z + 1)].z - VelocityField[uint3(DTid.x, DTid.y, DTid.z - 1)].z);
+
+    DensityField[DTid] = div;
+    VelocityField[DTid].w = 0;
+    GroupMemoryBarrierWithGroupSync();
+
+    [unroll]
+    for (int k = 0; k < 20; ++k)
+    {
+        float p = DensityField[DTid];
+        float p0 = DensityField[uint3(DTid.x - 1, DTid.y, DTid.z)];
+        float p1 = DensityField[uint3(DTid.x + 1, DTid.y, DTid.z)];
+        float p2 = DensityField[uint3(DTid.x, DTid.y - 1, DTid.z)];
+        float p3 = DensityField[uint3(DTid.x, DTid.y + 1, DTid.z)];
+        float p4 = DensityField[uint3(DTid.x, DTid.y, DTid.z - 1)];
+        float p5 = DensityField[uint3(DTid.x, DTid.y, DTid.z + 1)];
+
+        DensityField[DTid] = (p0 + p1 + p2 + p3 + p4 + p5 - div) / 6.0;
+    }
+
+    float4 grad;
+    grad.x = halfrdx.x * (DensityField[uint3(DTid.x + 1, DTid.y, DTid.z)] - DensityField[uint3(DTid.x - 1, DTid.y, DTid.z)]);
+    grad.y = halfrdx.y * (DensityField[uint3(DTid.x, DTid.y + 1, DTid.z)] - DensityField[uint3(DTid.x, DTid.y - 1, DTid.z)]);
+    grad.z = halfrdx.z * (DensityField[uint3(DTid.x, DTid.y, DTid.z + 1)] - DensityField[uint3(DTid.x, DTid.y, DTid.z - 1)]);
+    grad.w = 0;
+
+    VelocityField[DTid] -= grad;
+}
+
+[numthreads(THREADS_PER_GROUP, THREADS_PER_GROUP, THREADS_PER_GROUP)]
+void MainCS(uint3 DTid : SV_DispatchThreadID, uint3 GTid : SV_GroupThreadID)
+{
+    if (any(DTid >= GridSize))
+        return;
+
+    switch (SimulationStep)
+    {
+        case 0:
+            Diffuse(DTid, GTid);
+            break;
+        case 1:
+            Project(DTid);
+            break;
+        case 2:
+            Advect(DTid);
+            break;
+        case 3:
+            Project(DTid);
+            break;
+    }
+}
