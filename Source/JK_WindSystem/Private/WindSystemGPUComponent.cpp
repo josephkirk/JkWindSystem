@@ -47,12 +47,21 @@ UWindGPUSimulationComponent::UWindGPUSimulationComponent()
 void UWindGPUSimulationComponent::BeginPlay()
 {
     Super::BeginPlay();
-    InitializeGPUResources();
+    // Initialize GPU resources on the rendering thread
+    ENQUEUE_RENDER_COMMAND(InitializeGPUResources)(
+        [this](FRHICommandListImmediate& RHICmdList)
+        {
+            InitializeGPUResources();
+        });
 }
 
 void UWindGPUSimulationComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-    ReleaseGPUResources();
+    ENQUEUE_RENDER_COMMAND(ReleaseGPUResources)(
+        [this](FRHICommandListImmediate& RHICmdList)
+        {
+            ReleaseGPUResources();
+        });
     Super::EndPlay(EndPlayReason);
 }
 
@@ -138,20 +147,22 @@ void UWindGPUSimulationComponent::AddWindAtLocation(const FVector& Location, con
 
 void UWindGPUSimulationComponent::UpdateGPUTexture(int32 X, int32 Y, int32 Z, const FVector& Velocity, float Density)
 {
-    FRHICommandListImmediate& RHICmdList = FRHICommandListExecutor::GetImmediateCommandList();
+    ENQUEUE_RENDER_COMMAND(UpdateGPUTexture)(
+        [this, X, Y, Z, Velocity, Density](FRHICommandListImmediate& RHICmdList)
+        {
+            FFloat16Color VelocityData;
+            VelocityData.R = Velocity.X;
+            VelocityData.G = Velocity.Y;
+            VelocityData.B = Velocity.Z;
+            VelocityData.A = 0.0f;
 
-    FFloat16Color VelocityData;
-    VelocityData.R = Velocity.X;
-    VelocityData.G = Velocity.Y;
-    VelocityData.B = Velocity.Z;
-    VelocityData.A = 0.0f;
+            FUpdateTextureRegion3D UpdateRegion(X, Y, Z, 0, 0, 0, 1, 1, 1);
 
-    FUpdateTextureRegion3D UpdateRegion(X, Y, Z, 0, 0, 0, 1, 1, 1);
+            RHICmdList.UpdateTexture3D(VelocityFieldTexture, 0, UpdateRegion, sizeof(FFloat16Color), sizeof(FFloat16Color), (uint8*)&VelocityData);
 
-    RHICmdList.UpdateTexture3D(VelocityFieldTexture, 0, UpdateRegion, sizeof(FFloat16Color), sizeof(FFloat16Color), (uint8*)&VelocityData);
-    
-    float DensityData = Density;
-    RHICmdList.UpdateTexture3D(DensityFieldTexture, 0, UpdateRegion, sizeof(float), sizeof(float), (uint8*)&DensityData);
+            float DensityData = Density;
+            RHICmdList.UpdateTexture3D(DensityFieldTexture, 0, UpdateRegion, sizeof(float), sizeof(float), (uint8*)&DensityData);
+        });
 }
 
 void UWindGPUSimulationComponent::UpdateGridFromGPU()
@@ -206,8 +217,9 @@ void UWindGPUSimulationComponent::InitializeGPUResources()
     FRDGTexture* RDGVelocityFieldTexture = GraphBuilder.CreateTexture(VelocityDesc, TEXT("VelocityFieldTexture"));
     FRDGTexture* RDGDensityFieldTexture = GraphBuilder.CreateTexture(DensityDesc, TEXT("DensityFieldTexture"));
 
-    GraphBuilder.Execute();
-
+    //GraphBuilder.Execute();
+    // getRHI crash with error "Accessing the RHI resource of VelocityFieldTexture at this time is not allowed. If you hit this check in pass, that is due to this resource not being referenced in the parameters of your pass." reference FGeometryMaskPostProcess_Blur::Execute_RenderThread for correct implementation
+    // H:\Epic\UE_5.4\Engine\Plugins\Experimental\GeometryMask\Source\GeometryMask\Private\Shaders\GeometryMaskPostProcess_Blur.cpp
     VelocityFieldTexture = RDGVelocityFieldTexture->GetRHI();
     DensityFieldTexture = RDGDensityFieldTexture->GetRHI();
 
@@ -225,21 +237,28 @@ void UWindGPUSimulationComponent::InitializeGPUResources()
 
 void UWindGPUSimulationComponent::DispatchComputeShader(FRHICommandListImmediate& RHICmdList, float DeltaTime)
 {
+    if (!VelocityFieldTexture || !DensityFieldTexture)
+    {
+        WINDSYSTEM_LOG_ERROR(TEXT("GPU Textures not initialized"));
+        return;
+    }
     FRDGBuilder GraphBuilder(RHICmdList);
+
+    FRDGTextureRef VelocityFieldRDG = GraphBuilder.RegisterExternalTexture(CreateRenderTarget(VelocityFieldTexture, TEXT("VelocityField")));
+    FRDGTextureRef DensityFieldRDG = GraphBuilder.RegisterExternalTexture(CreateRenderTarget(DensityFieldTexture, TEXT("DensityField")));
 
     TShaderMapRef<FWindSimulationCS> ComputeShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
 
     FWindSimulationCS::FParameters* Parameters = GraphBuilder.AllocParameters<FWindSimulationCS::FParameters>();
-    Parameters->VelocityField = GraphBuilder.CreateUAV(GraphBuilder.RegisterExternalTexture(CreateRenderTarget(VelocityFieldTexture, TEXT("VelocityField"))));
-    Parameters->DensityField = GraphBuilder.CreateUAV(GraphBuilder.RegisterExternalTexture(CreateRenderTarget(DensityFieldTexture, TEXT("DensityField"))));
+    Parameters->VelocityField = GraphBuilder.CreateUAV(VelocityFieldRDG);
+    Parameters->DensityField = GraphBuilder.CreateUAV(DensityFieldRDG);
     Parameters->PrevVelocityField = VelocityFieldSRV;
     Parameters->PrevDensityField = DensityFieldSRV;
     Parameters->DeltaTime = DeltaTime;
     Parameters->Viscosity = Viscosity;
-    Parameters->Diffusion = 0.1f; // Adjust as needed
+    Parameters->Diffusion = 0.1f;
     Parameters->GridSize = FIntVector(GridSize, GridSize, GridSize);
 
-    // Perform multiple simulation steps
     for (int32 Step = 0; Step < 4; ++Step)
     {
         Parameters->SimulationStep = Step;
