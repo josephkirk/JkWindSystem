@@ -2,11 +2,8 @@
 
 RWTexture3D<float4> VelocityField;
 RWTexture3D<float> DensityField;
-Texture3D<float4> PrevVelocityField;
-Texture3D<float> PrevDensityField;
 float DeltaTime;
 float Viscosity;
-float Diffusion;
 uint3 GridSize;
 int SimulationStep;
 
@@ -23,8 +20,8 @@ uint FlattenIndex(uint3 id)
 void Diffuse(uint3 DTid, uint3 GTid)
 {
     uint flatIndex = FlattenIndex(GTid);
-    float4 velocity = PrevVelocityField[DTid];
-    float density = PrevDensityField[DTid];
+    float4 velocity = VelocityField[DTid];
+    float density = DensityField[DTid];
 
     SharedVelocity[flatIndex] = velocity;
     SharedDensity[flatIndex] = density;
@@ -54,7 +51,7 @@ void Diffuse(uint3 DTid, uint3 GTid)
         }
 
         velocity = (velocity + a * velocitySum) / (1 + 26 * a);
-        density = (density + Diffusion * DeltaTime * densitySum) / (1 + 26 * Diffusion * DeltaTime);
+        density = (density + a * densitySum) / (1 + 26 * a);
     }
 
     VelocityField[DTid] = velocity;
@@ -66,18 +63,18 @@ void Advect(uint3 DTid)
     float3 pos = DTid - DeltaTime * VelocityField[DTid].xyz;
     pos = clamp(pos, 0, GridSize - 1);
 
-    uint3 i0 = (uint3)pos;
-    uint3 i1 = i0 + 1;
+    uint3 i0 = (uint3) pos;
+    uint3 i1 = min(i0 + 1, GridSize - 1);
     float3 f = pos - i0;
 
-    float4 v000 = PrevVelocityField[i0];
-    float4 v100 = PrevVelocityField[uint3(i1.x, i0.y, i0.z)];
-    float4 v010 = PrevVelocityField[uint3(i0.x, i1.y, i0.z)];
-    float4 v110 = PrevVelocityField[uint3(i1.x, i1.y, i0.z)];
-    float4 v001 = PrevVelocityField[uint3(i0.x, i0.y, i1.z)];
-    float4 v101 = PrevVelocityField[uint3(i1.x, i0.y, i1.z)];
-    float4 v011 = PrevVelocityField[uint3(i0.x, i1.y, i1.z)];
-    float4 v111 = PrevVelocityField[uint3(i1.x, i1.y, i1.z)];
+    float4 v000 = VelocityField[i0];
+    float4 v100 = VelocityField[uint3(i1.x, i0.y, i0.z)];
+    float4 v010 = VelocityField[uint3(i0.x, i1.y, i0.z)];
+    float4 v110 = VelocityField[uint3(i1.x, i1.y, i0.z)];
+    float4 v001 = VelocityField[uint3(i0.x, i0.y, i1.z)];
+    float4 v101 = VelocityField[uint3(i1.x, i0.y, i1.z)];
+    float4 v011 = VelocityField[uint3(i0.x, i1.y, i1.z)];
+    float4 v111 = VelocityField[uint3(i1.x, i1.y, i1.z)];
 
     VelocityField[DTid] = lerp(
         lerp(lerp(v000, v100, f.x), lerp(v010, v110, f.x), f.y),
@@ -85,14 +82,14 @@ void Advect(uint3 DTid)
         f.z
     );
 
-    float d000 = PrevDensityField[i0];
-    float d100 = PrevDensityField[uint3(i1.x, i0.y, i0.z)];
-    float d010 = PrevDensityField[uint3(i0.x, i1.y, i0.z)];
-    float d110 = PrevDensityField[uint3(i1.x, i1.y, i0.z)];
-    float d001 = PrevDensityField[uint3(i0.x, i0.y, i1.z)];
-    float d101 = PrevDensityField[uint3(i1.x, i0.y, i1.z)];
-    float d011 = PrevDensityField[uint3(i0.x, i1.y, i1.z)];
-    float d111 = PrevDensityField[uint3(i1.x, i1.y, i1.z)];
+    float d000 = DensityField[i0];
+    float d100 = DensityField[uint3(i1.x, i0.y, i0.z)];
+    float d010 = DensityField[uint3(i0.x, i1.y, i0.z)];
+    float d110 = DensityField[uint3(i1.x, i1.y, i0.z)];
+    float d001 = DensityField[uint3(i0.x, i0.y, i1.z)];
+    float d101 = DensityField[uint3(i1.x, i0.y, i1.z)];
+    float d011 = DensityField[uint3(i0.x, i1.y, i1.z)];
+    float d111 = DensityField[uint3(i1.x, i1.y, i1.z)];
 
     DensityField[DTid] = lerp(
         lerp(lerp(d000, d100, f.x), lerp(d010, d110, f.x), f.y),

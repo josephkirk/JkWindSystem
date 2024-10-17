@@ -2,13 +2,12 @@
 
 #include "CoreMinimal.h"
 #include "WindSystemComponent.h"
-#include "RHI.h"
-#include "RHIResources.h"
 #include "RenderGraphResources.h"
-#include "WindSystemCommon.h"
+#include "Engine/TextureRenderTargetVolume.h"
 #include "WindSystemGPUComponent.generated.h"
 
-#define MAX_GRID_SIZE 128 // Adjust this value as needed
+class FRDGBuilder;
+class UTextureRenderTargetVolume;
 
 UCLASS()
 class JK_WINDSYSTEM_API UWindGPUSimulationComponent : public UWindSimulationComponent
@@ -21,25 +20,21 @@ public:
     virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
     virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-    virtual void SimulationStep(float DeltaTime) override;
 
     virtual FVector GetWindVelocityAtLocation(const FVector& Location) const override;
     virtual void AddWindAtLocation(const FVector& Location, const FVector& WindVelocity) override;
 
+    virtual void SimulationStep(float DeltaTime) override;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wind Simulation")
+    UTextureRenderTargetVolume* VelocityRenderTarget;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wind Simulation")
+    UTextureRenderTargetVolume* DensityRenderTarget;
+
 private:
-    FTexture3DRHIRef VelocityFieldTexture;
-    FTexture3DRHIRef DensityFieldTexture;
-    FRHIUnorderedAccessView* VelocityFieldUAV;
-    FRHIUnorderedAccessView* DensityFieldUAV;
-    FRHIShaderResourceView* VelocityFieldSRV;
-    FRHIShaderResourceView* DensityFieldSRV;
+    void Execute(UTextureRenderTargetVolume* InVelocityRenderTarget, UTextureRenderTargetVolume* InDensityRenderTargetfloat,float DeltaTime);
+    void Execute_RenderThread(FRHICommandListImmediate& RHICmdList, UTextureRenderTargetVolume* InVelocityRenderTarget, UTextureRenderTargetVolume* InDensityRenderTarget, float DeltaTime);
 
-    float GridUpdateInterval;
-    float TimeSinceLastGridUpdate;
-
-    void InitializeGPUResources();
-    void ReleaseGPUResources();
-    void DispatchComputeShader(FRHICommandListImmediate& RHICmdList, float DeltaTime);
-    void UpdateGPUTexture(int32 X, int32 Y, int32 Z, const FVector& Velocity, float Density);
-    void UpdateGridFromGPU();
+    float LastDeltaTime;
 };
