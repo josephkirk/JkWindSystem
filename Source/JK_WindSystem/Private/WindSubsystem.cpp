@@ -152,7 +152,7 @@ void UWindSimulationSubsystem::EnsureWindSystemActorInitialized()
             {
                 FActorSpawnParameters SpawnParams;
                 SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-                WindSystemActor = World->SpawnActor<AWindSystemActor>(SpawnParams);
+                WindSystemActor = World->SpawnActor<AGPUWindSystemActor>(SpawnParams);
             }
 
             if (WindSystemActor)
