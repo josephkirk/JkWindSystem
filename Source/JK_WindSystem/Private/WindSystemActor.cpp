@@ -1,6 +1,7 @@
 #include "WindSystemActor.h"
-
-AWindSystemActor::AWindSystemActor()
+#include "WindSystemGPUComponent.h"
+AWindSystemActor::AWindSystemActor(const FObjectInitializer& ObjectInitializer)
+    : Super(ObjectInitializer)
 {
     PrimaryActorTick.bCanEverTick = true;
 
@@ -32,3 +33,8 @@ void AWindSystemActor::PostEditChangeProperty(FPropertyChangedEvent& PropertyCha
     }
 }
 #endif
+
+AGPUWindSystemActor::AGPUWindSystemActor(const FObjectInitializer& ObjectInitializer)
+    : Super(ObjectInitializer.SetDefaultSubobjectClass<UWindGPUSimulationComponent>(TEXT("WindSimulationComponent")))
+{
+}
