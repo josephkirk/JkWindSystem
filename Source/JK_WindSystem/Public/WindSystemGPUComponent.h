@@ -32,9 +32,16 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wind Simulation")
     UTextureRenderTargetVolume* DensityRenderTarget;
 
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wind Simulation")
+    float UpdateInterval = 1.0f / 30.0f;  // 33.33 ms
 private:
+    void UpdateWindGridFromGPU();
+    void UpdateWindGridFromGPU_Callback();
+    void UpdateWindGridFromGPU_RenderThread(FRHICommandListImmediate& RHICmdList);
+
     void Execute(UTextureRenderTargetVolume* InVelocityRenderTarget, UTextureRenderTargetVolume* InDensityRenderTargetfloat,float DeltaTime);
     void Execute_RenderThread(FRHICommandListImmediate& RHICmdList, UTextureRenderTargetVolume* InVelocityRenderTarget, UTextureRenderTargetVolume* InDensityRenderTarget, float DeltaTime);
 
+    FTimerHandle UpdateWindGridTimerHandle;
     float LastDeltaTime;
 };

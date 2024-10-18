@@ -24,6 +24,7 @@ public:
     void SetCell(int32 X, int32 Y, int32 Z, const FVector& Value);
 
     int32 GetSize() const { return GridSize; }
+    FIntVector GetBoundSize() const { return FIntVector(GridSize, GridSize, GridSize); }
     float GetCellSize() const { return CellSize; }
 
     TArray<FVector>& GetGridData() { return Grid; }
