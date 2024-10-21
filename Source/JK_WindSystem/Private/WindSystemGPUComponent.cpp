@@ -125,6 +125,7 @@ void UWindGPUSimulationComponent::UpdateWindGridFromGPU()
 }
 
 //TODO: Rewrite this part as this crash game if used. considering reference MedialOFrameManager.h or AddReadbackBufferPass in RenderGraphUtils.h 
+// https://github.com/G4ND44/Unreal-Engine-Compute-Shader-Destory/blob/main/Source/PivotPainterDestroyModule/Private/PivotPainterDestroyCompute/PivotPainterDestroyCompute.cpp
 void UWindGPUSimulationComponent::UpdateWindGridFromGPU_RenderThread(FRHICommandListImmediate& RHICmdList)
 {
     check(IsInRenderingThread());
