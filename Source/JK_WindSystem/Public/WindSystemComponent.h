@@ -11,10 +11,11 @@
 #include "WindSystemComponent.generated.h"
 
 class UWindSimulationComponent;
+class UWindGPUSimulationComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnWindCellUpdated, const FVector&, CellCenter, const FVector&, WindVelocity, float, CellSize);
 
-class FWindGrid
+class JK_WINDSYSTEM_API FWindGrid
 {
 public:
     FWindGrid(int32 Size, float InCellSize);
@@ -23,6 +24,7 @@ public:
     void SetCell(int32 X, int32 Y, int32 Z, const FVector& Value);
 
     int32 GetSize() const { return GridSize; }
+    FIntVector GetBoundSize() const { return FIntVector(GridSize, GridSize, GridSize); }
     float GetCellSize() const { return CellSize; }
 
     TArray<FVector>& GetGridData() { return Grid; }
@@ -34,8 +36,8 @@ private:
     int32 GridSize;
     float CellSize;
 
-    int32 GetIndex(int32 X, int32 Y, int32 Z) const;
-    bool IsValidIndex(int32 X, int32 Y, int32 Z) const;
+    FORCEINLINE int32 GetIndex(int32 X, int32 Y, int32 Z) const;
+    FORCEINLINE bool IsValidIndex(int32 X, int32 Y, int32 Z) const;
 
 friend UWindSimulationComponent;
 };
@@ -65,10 +67,10 @@ public:
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
-    FVector GetWindVelocityAtLocation(const FVector& Location) const;
+    virtual FVector GetWindVelocityAtLocation(const FVector& Location) const;
 
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
-    void AddWindAtLocation(const FVector& Location, const FVector& WindVelocity);
+    virtual void AddWindAtLocation(const FVector& Location, const FVector& WindVelocity);
 
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
     float GetSimulationFrequency() const { return SimulationFrequency; }
@@ -79,7 +81,7 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
     float GetCellSize() const { return CellSize; }
 
-    void SimulationStep(float DeltaTime);
+    void virtual SimulationStep(float DeltaTime);
 
     UFUNCTION(BlueprintCallable, Category = "Wind Simulation|Testing")
     void InitializeForTesting();
@@ -91,7 +93,7 @@ public:
     float GetMaxAllowedWindVelocity() const;
 
     void UpdateGridCenter(const FVector& NewCenter);
-private:
+protected:
     TSharedPtr<FWindGrid> WindGrid;
     TSharedPtr<FWindGrid> TempGrid;
     float Viscosity;
@@ -112,11 +114,16 @@ private:
     bool bIsBroadcasting = false;
 
     const UWindSystemSettings* GetSettings() const;
-    void SwapGrids();
-    void BroadcastWindUpdates();
-    void HandleGridMovement();
-    void InitializeGrid();
+
     bool IsGridInitialized() const { return WindGrid != nullptr; }
+private:
+    
+
+    void InitializeGrid();
+    void SwapGrids();
+    void HandleGridMovement();
+    
+    
     void Diffuse(TSharedPtr<FWindGrid> Dst, const TSharedPtr<FWindGrid> Src, float Diff, float Dt);
     void Project(TSharedPtr<FWindGrid> Velocity, TSharedPtr<FWindGrid> P, TSharedPtr<FWindGrid> Div);
     void SetBoundary(TSharedPtr<FWindGrid> Field);
