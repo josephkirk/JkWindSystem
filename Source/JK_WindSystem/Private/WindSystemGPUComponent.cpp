@@ -12,6 +12,16 @@
 #include "DataDrivenShaderPlatformInfo.h"
 #include "RHIGPUReadback.h"
 
+// // Add the parameter struct after includes and before any function definitions
+// struct FCopyTextureToBufferParameters
+// {
+//     DECLARE_TYPE_LAYOUT(FCopyTextureToBufferParameters, NonVirtual);
+    
+//     LAYOUT_FIELD(FRDGTextureSRVRef, SourceTexture);
+//     LAYOUT_FIELD(FRDGBufferUAVRef, OutputBuffer);
+//     LAYOUT_FIELD(FIntVector, Size);
+// };
+
 class FWindSimulationCS : public FGlobalShader
 {
     DECLARE_GLOBAL_SHADER(FWindSimulationCS);
@@ -32,6 +42,30 @@ class FWindSimulationCS : public FGlobalShader
     }
 };
 
+class FCopyTextureToBufferCS : public FGlobalShader
+{
+    DECLARE_GLOBAL_SHADER(FCopyTextureToBufferCS);
+    SHADER_USE_PARAMETER_STRUCT(FCopyTextureToBufferCS, FGlobalShader);
+    BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
+        SHADER_PARAMETER_RDG_TEXTURE_SRV(Texture3D, SourceTexture)
+        SHADER_PARAMETER_RDG_BUFFER_UAV(RWStructuredBuffer<FFloat16Color>, OutputBuffer)
+        SHADER_PARAMETER(uint32, SizeX)
+        SHADER_PARAMETER(uint32, SizeY)
+        SHADER_PARAMETER(uint32, SizeZ)
+    END_SHADER_PARAMETER_STRUCT()
+    static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
+    {
+        return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM5);
+    }
+};
+
+
+// struct FRDGParameters
+// {
+//     FCopyTextureToBufferCS::FParameters* Parameters;
+// };
+
+IMPLEMENT_GLOBAL_SHADER(FCopyTextureToBufferCS, "/Plugin/JK_WindSystem/Private/CopyTextureToBuffer.usf", "MainCS", SF_Compute);
 IMPLEMENT_GLOBAL_SHADER(FWindSimulationCS, "/Plugin/JK_WindSystem/Private/WindSimulationCS.usf", "MainCS", SF_Compute);
 
 UWindGPUSimulationComponent::UWindGPUSimulationComponent()
@@ -113,7 +147,7 @@ void UWindGPUSimulationComponent::SimulationStep(float DeltaTime)
 
 void UWindGPUSimulationComponent::UpdateWindGridFromGPU_Callback()
 {
-    //UpdateWindGridFromGPU();
+    UpdateWindGridFromGPU();
 }
 void UWindGPUSimulationComponent::UpdateWindGridFromGPU()
 {
@@ -130,114 +164,51 @@ void UWindGPUSimulationComponent::UpdateWindGridFromGPU_RenderThread(FRHICommand
 
     if (!VelocityRenderTarget || !WindGrid)
     {
-        UE_LOG(LogTemp, Error, TEXT("VelocityRenderTarget or WindGrid is null"));
         return;
     }
 
     FRDGBuilder GraphBuilder(RHICmdList);
     {
-        FRDGTextureRef SourceTexture = GraphBuilder.RegisterExternalTexture(CreateRenderTarget(VelocityRenderTarget->GetRenderTargetResource()->GetRenderTargetTexture(), TEXT("VelocityField")));
-
-        FIntVector Size = WindGrid->GetBoundSize();
-        uint32 BufferSize = Size.X * Size.Y * Size.Z * sizeof(FFloat16Color);
-
-        // Create a staging buffer for the readback
-        FRDGBufferRef StagingBuffer = GraphBuilder.CreateBuffer(
-            FRDGBufferDesc::CreateStructuredDesc(sizeof(FFloat16Color), Size.X * Size.Y * Size.Z),
-            TEXT("WindSimulationStagingBuffer")
+        // Get texture RHI
+        FRHITexture* TextureRHI = VelocityRenderTarget->GetRenderTargetResource()->GetRenderTargetTexture();
+        FRDGTextureRef SourceTexture = GraphBuilder.RegisterExternalTexture(
+            CreateRenderTarget(TextureRHI, TEXT("VelocityTexture"))
         );
 
-        // Add pass to copy texture data to the staging buffer
+        // Create buffer for output
+        const int32 BufferSize = VelocityRenderTarget->SizeX * VelocityRenderTarget->SizeY * VelocityRenderTarget->SizeZ;
+        FRDGBufferRef OutputBuffer = GraphBuilder.CreateBuffer(
+            FRDGBufferDesc::CreateStructuredDesc(sizeof(FFloat16Color), BufferSize),
+            TEXT("OutputBuffer")
+        );
+        FRDGBufferUAVRef BufferUAV = GraphBuilder.CreateUAV(OutputBuffer);
+
+        // Get compute shader
+        TShaderMapRef<FCopyTextureToBufferCS> ComputeShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
+
+        // Create parameters
+        auto* PassParameters = GraphBuilder.AllocParameters<FCopyTextureToBufferCS::FParameters>();
+        PassParameters->SourceTexture = GraphBuilder.CreateSRV(SourceTexture);
+        PassParameters->OutputBuffer = BufferUAV;
+        PassParameters->SizeX = VelocityRenderTarget->SizeX;
+        PassParameters->SizeY = VelocityRenderTarget->SizeY;
+        PassParameters->SizeZ = VelocityRenderTarget->SizeZ;
+
+        // Add compute pass
         GraphBuilder.AddPass(
             RDG_EVENT_NAME("CopyTextureToBuffer"),
-            ERDGPassFlags::Copy,
-            [SourceTexture, StagingBuffer, Size, BufferSize](FRHICommandList& RHICmdList)
+            PassParameters,  // Pass the parameters struct
+            ERDGPassFlags::Compute,
+            [ComputeShader, PassParameters](FRHICommandList& RHICmdList)
             {
-                FRHIBuffer* Buffer = StagingBuffer->GetRHI();
-                FRHITexture* Texture = SourceTexture->GetRHI();
-
-                if (void* MappedData = RHICmdList.LockBuffer(Buffer, 0, BufferSize, RLM_WriteOnly))
-                {
-                    FFloat16Color* DestData = static_cast<FFloat16Color*>(MappedData);
-                    
-                    // Create a temporary texture for readback
-                    FRHITextureCreateDesc Desc = FRHITextureCreateDesc::Create2D(TEXT("TempReadback"))
-                        .SetExtent(Size.X, Size.Y)
-                        .SetFormat(PF_FloatRGBA)
-                        .SetNumMips(1)
-                        .SetFlags(TexCreate_ShaderResource);
-                    
-                    FTexture2DRHIRef TempTexture = RHICreateTexture(Desc);
-
-                    // Copy slice by slice
-                    for (int32 SliceIndex = 0; SliceIndex < static_cast<int32>(Size.Z); ++SliceIndex)
-                    {
-                        uint32 DestOffset = SliceIndex * Size.X * Size.Y;
-                        FRHICopyTextureInfo CopyInfo;
-                        CopyInfo.Size = FIntVector(Size.X, Size.Y, 1);
-                        CopyInfo.SourceSliceIndex = SliceIndex;
-                        RHICmdList.CopyTexture(Texture, TempTexture, CopyInfo);
-                        
-                        uint32 Stride = 0;
-                        if (void* TextureData = RHILockTexture2D(TempTexture, 0, RLM_ReadOnly, Stride, true))
-                        {
-                            FMemory::Memcpy(
-                                DestData + DestOffset,
-                                TextureData,
-                                Size.X * Size.Y * sizeof(FFloat16Color)
-                            );
-                            RHIUnlockTexture2D(TempTexture, 0, false);
-                        }
-                    }
-                    
-                    RHICmdList.UnlockBuffer(Buffer);
-                }
+                FComputeShaderUtils::Dispatch(RHICmdList, ComputeShader, *PassParameters,
+                    FComputeShaderUtils::GetGroupCount(
+                        FIntVector(PassParameters->SizeX, PassParameters->SizeY, PassParameters->SizeZ),
+                        FIntVector(8, 8, 1)
+                    )
+                );
             }
         );
-
-        // Create GPU readback object
-        FRHIGPUBufferReadback* GPUBufferReadback = new FRHIGPUBufferReadback(TEXT("WindSimulationReadback"));
-        AddEnqueueCopyPass(GraphBuilder, GPUBufferReadback, StagingBuffer, BufferSize);
-
-        // Setup async readback
-        auto RunnerFunc = [this, GPUBufferReadback, Size](auto&& RunnerFunc) -> void {
-            if (GPUBufferReadback->IsReady())
-            {
-                const FFloat16Color* ColorData = static_cast<const FFloat16Color*>(GPUBufferReadback->Lock(Size.X * Size.Y * Size.Z * sizeof(FFloat16Color)));
-                
-                if (ColorData)
-                {
-                    AsyncTask(ENamedThreads::GameThread, [this, ColorData, Size]() {
-                        for (int32 Z = 0; Z < Size.Z; ++Z)
-                        {
-                            for (int32 Y = 0; Y < Size.Y; ++Y)
-                            {
-                                for (int32 X = 0; X < Size.X; ++X)
-                                {
-                                    int32 Index = X + Y * Size.X + Z * Size.X * Size.Y;
-                                    FFloat16Color Color = ColorData[Index];
-                                    FVector Velocity(Color.R.GetFloat(), Color.G.GetFloat(), Color.B.GetFloat());
-                                    WindGrid->SetCell(X, Y, Z, Velocity);
-                                }
-                            }
-                        }
-                    });
-                }
-                
-                GPUBufferReadback->Unlock();
-                delete GPUBufferReadback;
-            }
-            else
-            {
-                AsyncTask(ENamedThreads::ActualRenderingThread, [RunnerFunc]() {
-                    RunnerFunc(RunnerFunc);
-                });
-            }
-        };
-
-        AsyncTask(ENamedThreads::ActualRenderingThread, [RunnerFunc]() {
-            RunnerFunc(RunnerFunc);
-        });
     }
     GraphBuilder.Execute();
 }

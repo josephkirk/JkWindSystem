@@ -1,0 +1,35 @@
+#include "/Engine/Private/Common.ush"
+
+// Shader parameters
+Texture3D<float4> SourceTexture;
+RWStructuredBuffer<float4> OutputBuffer;
+uint SizeX;
+uint SizeY;
+uint SizeZ;
+
+[numthreads(8, 8, 1)]
+void MainCS(
+    uint3 GroupId : SV_GroupID,
+    uint3 DispatchThreadId : SV_DispatchThreadID,
+    uint3 GroupThreadId : SV_GroupThreadID)
+{
+    // Calculate 3D position
+    uint3 Position = DispatchThreadId;
+    
+    // Check if we're within bounds
+    if (Position.x >= SizeX || Position.y >= SizeY || Position.z >= SizeZ)
+    {
+        return;
+    }
+    
+    // Calculate linear index into the output buffer
+    uint BufferIndex = Position.x + 
+                      Position.y * SizeX + 
+                      Position.z * (SizeX * SizeY);
+    
+    // Sample the 3D texture
+    float4 Color = SourceTexture[Position];
+    
+    // Write to the output buffer
+    OutputBuffer[BufferIndex] = Color;
+}
