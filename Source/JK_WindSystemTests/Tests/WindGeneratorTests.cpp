@@ -3,11 +3,11 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPointWindGeneratorTest, "JK_WindSystem.Generators.PointWindGenerator", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter)
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDirectionalWindGeneratorTest, "JK_WindSystem.Generators.DirectionalWindGenerator", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter)
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FVortexWindGeneratorTest, "JK_WindSystem.Generators.VortexWindGenerator", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter)
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSplineWindGeneratorTest, "JK_WindSystem.Generators.SplineWindGenerator", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter)
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWindGeneratorSimulationIntegrationTest, "JK_WindSystem.Integration.GeneratorToSimulation", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FPointWindGeneratorTest, "JK_WindSystem.Generators.PointWindGenerator", EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDirectionalWindGeneratorTest, "JK_WindSystem.Generators.DirectionalWindGenerator", EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FVortexWindGeneratorTest, "JK_WindSystem.Generators.VortexWindGenerator", EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FSplineWindGeneratorTest, "JK_WindSystem.Generators.SplineWindGenerator", EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWindGeneratorSimulationIntegrationTest, "JK_WindSystem.Integration.GeneratorToSimulation", EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
 bool FPointWindGeneratorTest::RunTest(const FString& Parameters)
 {

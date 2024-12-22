@@ -4,8 +4,8 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 CSV_DEFINE_CATEGORY(WindSystem, true);
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWindSystemLargeScalePerformanceTest, "JK_WindSystem.Performance.1KmCubeUnder2ms", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::PerfFilter | EAutomationTestFlags::HighPriority)
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWindSystemStressTest, "JK_WindSystem.Performance.StressTest", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::PerfFilter | EAutomationTestFlags::LowPriority)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWindSystemLargeScalePerformanceTest, "JK_WindSystem.Performance.1KmCubeUnder2ms", EAutomationTestFlags::EditorContext | EAutomationTestFlags::PerfFilter | EAutomationTestFlags::HighPriority)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWindSystemStressTest, "JK_WindSystem.Performance.StressTest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::PerfFilter | EAutomationTestFlags::LowPriority)
 struct FTestConfiguration
 {
     int32 GridSize;

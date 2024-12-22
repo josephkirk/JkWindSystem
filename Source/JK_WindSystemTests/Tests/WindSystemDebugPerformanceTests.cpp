@@ -6,7 +6,7 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWindSystemDebugVisualizationPerformanceTest, "JK_WindSystem.Performance.DebugVisualization", EAutomationTestFlags::ApplicationContextMask | EAutomationTestFlags::ProductFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FWindSystemDebugVisualizationPerformanceTest, "JK_WindSystem.Performance.DebugVisualization", EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
 
 bool FWindSystemDebugVisualizationPerformanceTest::RunTest(const FString& Parameters)
 {
