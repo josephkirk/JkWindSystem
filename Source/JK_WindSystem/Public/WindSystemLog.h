@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 
-DECLARE_LOG_CATEGORY_EXTERN(LogWindSystem, Log, All);
+JK_WINDSYSTEM_API DECLARE_LOG_CATEGORY_EXTERN(LogWindSystem, Log, All);
 
 // Helper macros for logging
 #define WINDSYSTEM_LOG(Verbosity, Format, ...) \

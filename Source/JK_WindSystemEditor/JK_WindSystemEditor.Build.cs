@@ -16,8 +16,7 @@ public class JK_WindSystemEditor : ModuleRules
         PublicDependencyModuleNames.AddRange(
             new string[]
             {
-                "Core",
-                "JK_WindSystem"
+                "Core"
             }
         );
 
@@ -25,6 +24,7 @@ public class JK_WindSystemEditor : ModuleRules
             new string[]
             {
                 "CoreUObject",
+                "JK_WindSystem",
                 "Engine",
                 "Slate",
                 "SlateCore",
