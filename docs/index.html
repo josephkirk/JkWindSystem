@@ -1,0 +1,1189 @@
+<!DOCTYPE html>
+<!-- saved from url=(0065)https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Wind Simulation for Kite Sailing in Unreal Engine</title>
+    <script src="./Real-Time Wind Simulation for Kite Sailing in Unreal Engine_files/saved_resource"></script>
+    <script src="./Real-Time Wind Simulation for Kite Sailing in Unreal Engine_files/three.min.js.download"></script>
+    <script src="./Real-Time Wind Simulation for Kite Sailing in Unreal Engine_files/vanta.waves.min.js.download"></script>
+    <link href="./Real-Time Wind Simulation for Kite Sailing in Unreal Engine_files/css2" rel="stylesheet">
+    <link rel="stylesheet" href="./Real-Time Wind Simulation for Kite Sailing in Unreal Engine_files/all.min.css">
+    <style>
+        :root {
+            --color-primary: #1e3a8a;
+            --color-secondary: #0f766e;
+            --color-accent: #f59e0b;
+            --color-neutral: #f8fafc;
+            --color-muted: #64748b;
+            --color-text: #0f172a;
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            line-height: 1.6;
+            color: var(--color-text);
+            background: var(--color-neutral);
+        }
+        
+        .font-display {
+            font-family: 'Playfair Display', serif;
+        }
+        
+        .text-primary { color: var(--color-primary); }
+        .text-secondary { color: var(--color-secondary); }
+        .text-accent { color: var(--color-accent); }
+        .text-muted { color: var(--color-muted); }
+        .bg-primary { background-color: var(--color-primary); }
+        .bg-secondary { background-color: var(--color-secondary); }
+        .bg-accent { background-color: var(--color-accent); }
+        
+        .toc-fixed {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 280px;
+            height: 100vh;
+            background: white;
+            border-right: 1px solid #e2e8f0;
+            z-index: 100;
+            overflow-y: auto;
+            padding: 2rem 1.5rem;
+        }
+        
+        .main-content {
+            margin-left: 280px;
+            min-height: 100vh;
+        }
+        
+        .hero-section {
+            height: 70vh;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .bento-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            grid-template-rows: auto auto;
+            gap: 2rem;
+            height: 100%;
+        }
+        
+        .bento-main {
+            grid-row: 1 / -1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 4rem;
+            position: relative;
+            z-index: 10;
+        }
+        
+        .bento-side-1 {
+            background: rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 1rem;
+            padding: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .bento-side-2 {
+            background: rgba(255,255,255,0.05);
+            backdrop-filter: blur(5px);
+            border-radius: 1rem;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        
+        .hero-title {
+            font-size: clamp(2.5rem, 5vw, 4rem);
+            font-weight: 600;
+            line-height: 1.1;
+            margin-bottom: 2rem;
+            background: linear-gradient(135deg, #1e3a8a, #0f766e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .hero-subtitle {
+            font-size: 1.25rem;
+            color: #64748b;
+            max-width: 80%;
+            margin-bottom: 2rem;
+        }
+        
+        .section-header {
+            font-size: 2.5rem;
+            font-weight: 600;
+            margin-bottom: 2rem;
+            color: var(--color-primary);
+        }
+        
+        .subsection-header {
+            font-size: 1.75rem;
+            font-weight: 600;
+            margin: 2rem 0 1rem 0;
+            color: var(--color-secondary);
+        }
+        
+        .toc-link {
+            display: block;
+            padding: 0.5rem 0;
+            color: var(--color-muted);
+            text-decoration: none;
+            border-left: 2px solid transparent;
+            padding-left: 1rem;
+            margin-left: -1rem;
+            transition: all 0.2s ease;
+        }
+        
+        .toc-link:hover, .toc-link.active {
+            color: var(--color-primary);
+            border-left-color: var(--color-primary);
+            background: rgba(30, 58, 138, 0.05);
+        }
+        
+        .toc-link.sub {
+            font-size: 0.9rem;
+            padding-left: 2rem;
+            margin-left: -1rem;
+        }
+        
+        .content-section {
+            padding: 4rem;
+            max-width: 1200px;
+        }
+        
+        .highlight-box {
+            background: linear-gradient(135deg, rgba(30, 58, 138, 0.05), rgba(15, 118, 110, 0.05));
+            border-left: 4px solid var(--color-primary);
+            padding: 2rem;
+            margin: 2rem 0;
+            border-radius: 0 0.5rem 0.5rem 0;
+        }
+        
+        .citation {
+            color: var(--color-secondary);
+            text-decoration: none;
+            font-weight: 500;
+            border-bottom: 1px dotted var(--color-secondary);
+        }
+        
+        .citation:hover {
+            background: rgba(15, 118, 110, 0.1);
+            padding: 0.1rem 0.2rem;
+            border-radius: 0.25rem;
+        }
+        
+        .image-container {
+            margin: 2rem 0;
+            text-align: center;
+        }
+        
+        .image-container img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        
+        .image-caption {
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+            color: var(--color-muted);
+            font-style: italic;
+        }
+        
+        .toc-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: var(--color-primary);
+        }
+        
+        .pull-quote {
+            font-size: 1.5rem;
+            font-style: italic;
+            color: var(--color-secondary);
+            text-align: center;
+            padding: 2rem;
+            margin: 3rem 0;
+            border-top: 1px solid #e2e8f0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .code-block {
+            background: #1e293b;
+            color: #e2e8f0;
+            padding: 1.5rem;
+            border-radius: 0.5rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            overflow-x: auto;
+            margin: 1.5rem 0;
+        }
+        
+        .executive-summary {
+            background: linear-gradient(135deg, rgba(30, 58, 138, 0.03), rgba(15, 118, 110, 0.03));
+            border: 1px solid rgba(30, 58, 138, 0.1);
+            border-radius: 1rem;
+            padding: 3rem;
+            margin: 2rem 0;
+        }
+        
+        .summary-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--color-primary);
+            margin-bottom: 1rem;
+        }
+        
+        .wind-visualization {
+            background: linear-gradient(135deg, rgba(30, 58, 138, 0.02), rgba(15, 118, 110, 0.02));
+            border: 2px dashed rgba(30, 58, 138, 0.2);
+            border-radius: 1rem;
+            padding: 2rem;
+            text-align: center;
+            margin: 2rem 0;
+        }
+        
+        .wind-visualization i {
+            font-size: 3rem;
+            color: var(--color-secondary);
+            margin-bottom: 1rem;
+            animation: float 3s ease-in-out infinite;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        
+        @media (max-width: 1024px) {
+            .toc-fixed {
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+            }
+            
+            .toc-fixed.mobile-open {
+                transform: translateX(0);
+            }
+            
+            .main-content {
+                margin-left: 0;
+            }
+            
+            .bento-grid {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto auto auto;
+            }
+            
+            .bento-main {
+                grid-row: auto;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .hero-section {
+                height: auto;
+                min-height: 70vh;
+            }
+            
+            .bento-main {
+                padding: 2rem;
+            }
+            
+            .hero-subtitle {
+                max-width: 100%;
+            }
+            
+            .content-section {
+                padding: 2rem;
+            }
+        }
+        
+        @media (max-width: 640px) {
+            .bento-main {
+                padding: 1.5rem;
+            }
+            
+            .hero-title {
+                font-size: clamp(1.8rem, 6vw, 2.5rem);
+            }
+            
+            .hero-subtitle {
+                font-size: 1rem;
+            }
+            
+            .content-section {
+                padding: 1.5rem;
+            }
+            
+            .image-container img {
+                border-radius: 0.25rem;
+            }
+            
+            .highlight-box,
+            .executive-summary,
+            .wind-visualization {
+                padding: 1.5rem;
+            }
+            
+            .pull-quote {
+                font-size: 1.2rem;
+                padding: 1.5rem;
+            }
+        }
+    </style>
+  <style>*, ::before, ::after{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgb(59 130 246 / 0.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }::backdrop{--tw-border-spacing-x:0;--tw-border-spacing-y:0;--tw-translate-x:0;--tw-translate-y:0;--tw-rotate:0;--tw-skew-x:0;--tw-skew-y:0;--tw-scale-x:1;--tw-scale-y:1;--tw-pan-x: ;--tw-pan-y: ;--tw-pinch-zoom: ;--tw-scroll-snap-strictness:proximity;--tw-gradient-from-position: ;--tw-gradient-via-position: ;--tw-gradient-to-position: ;--tw-ordinal: ;--tw-slashed-zero: ;--tw-numeric-figure: ;--tw-numeric-spacing: ;--tw-numeric-fraction: ;--tw-ring-inset: ;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-color:rgb(59 130 246 / 0.5);--tw-ring-offset-shadow:0 0 #0000;--tw-ring-shadow:0 0 #0000;--tw-shadow:0 0 #0000;--tw-shadow-colored:0 0 #0000;--tw-blur: ;--tw-brightness: ;--tw-contrast: ;--tw-grayscale: ;--tw-hue-rotate: ;--tw-invert: ;--tw-saturate: ;--tw-sepia: ;--tw-drop-shadow: ;--tw-backdrop-blur: ;--tw-backdrop-brightness: ;--tw-backdrop-contrast: ;--tw-backdrop-grayscale: ;--tw-backdrop-hue-rotate: ;--tw-backdrop-invert: ;--tw-backdrop-opacity: ;--tw-backdrop-saturate: ;--tw-backdrop-sepia: ;--tw-contain-size: ;--tw-contain-layout: ;--tw-contain-paint: ;--tw-contain-style: }/* ! tailwindcss v3.4.16 | MIT License | https://tailwindcss.com */*,::after,::before{box-sizing:border-box;border-width:0;border-style:solid;border-color:#e5e7eb}::after,::before{--tw-content:''}:host,html{line-height:1.5;-webkit-text-size-adjust:100%;-moz-tab-size:4;tab-size:4;font-family:ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";font-feature-settings:normal;font-variation-settings:normal;-webkit-tap-highlight-color:transparent}body{margin:0;line-height:inherit}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,pre,samp{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;font-feature-settings:normal;font-variation-settings:normal;font-size:1em}small{font-size:80%}sub,sup{font-size:75%;line-height:0;position:relative;vertical-align:baseline}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}button,input,optgroup,select,textarea{font-family:inherit;font-feature-settings:inherit;font-variation-settings:inherit;font-size:100%;font-weight:inherit;line-height:inherit;letter-spacing:inherit;color:inherit;margin:0;padding:0}button,select{text-transform:none}button,input:where([type=button]),input:where([type=reset]),input:where([type=submit]){-webkit-appearance:button;background-color:transparent;background-image:none}:-moz-focusring{outline:auto}:-moz-ui-invalid{box-shadow:none}progress{vertical-align:baseline}::-webkit-inner-spin-button,::-webkit-outer-spin-button{height:auto}[type=search]{-webkit-appearance:textfield;outline-offset:-2px}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-file-upload-button{-webkit-appearance:button;font:inherit}summary{display:list-item}blockquote,dd,dl,figure,h1,h2,h3,h4,h5,h6,hr,p,pre{margin:0}fieldset{margin:0;padding:0}legend{padding:0}menu,ol,ul{list-style:none;margin:0;padding:0}dialog{padding:0}textarea{resize:vertical}input::placeholder,textarea::placeholder{opacity:1;color:#9ca3af}[role=button],button{cursor:pointer}:disabled{cursor:default}audio,canvas,embed,iframe,img,object,svg,video{display:block;vertical-align:middle}img,video{max-width:100%;height:auto}[hidden]:where(:not([hidden=until-found])){display:none}.fixed{position:fixed}.left-4{left:1rem}.top-4{top:1rem}.z-50{z-index:50}.mx-auto{margin-left:auto;margin-right:auto}.mb-2{margin-bottom:0.5rem}.mb-4{margin-bottom:1rem}.ml-4{margin-left:1rem}.mr-2{margin-right:0.5rem}.mt-4{margin-top:1rem}.mt-6{margin-top:1.5rem}.mt-8{margin-top:2rem}.flex{display:flex}.grid{display:grid}.h-auto{height:auto}.w-full{width:100%}.max-w-2xl{max-width:42rem}.max-w-xl{max-width:36rem}.list-inside{list-style-position:inside}.list-disc{list-style-type:disc}.items-center{align-items:center}.gap-6{gap:1.5rem}.space-x-4 > :not([hidden]) ~ :not([hidden]){--tw-space-x-reverse:0;margin-right:calc(1rem * var(--tw-space-x-reverse));margin-left:calc(1rem * calc(1 - var(--tw-space-x-reverse)))}.space-y-2 > :not([hidden]) ~ :not([hidden]){--tw-space-y-reverse:0;margin-top:calc(0.5rem * calc(1 - var(--tw-space-y-reverse)));margin-bottom:calc(0.5rem * var(--tw-space-y-reverse))}.space-y-1 > :not([hidden]) ~ :not([hidden]){--tw-space-y-reverse:0;margin-top:calc(0.25rem * calc(1 - var(--tw-space-y-reverse)));margin-bottom:calc(0.25rem * var(--tw-space-y-reverse))}.rounded{border-radius:0.25rem}.rounded-lg{border-radius:0.5rem}.bg-gray-100{--tw-bg-opacity:1;background-color:rgb(243 244 246 / var(--tw-bg-opacity, 1))}.bg-white{--tw-bg-opacity:1;background-color:rgb(255 255 255 / var(--tw-bg-opacity, 1))}.p-2{padding:0.5rem}.px-2{padding-left:0.5rem;padding-right:0.5rem}.py-1{padding-top:0.25rem;padding-bottom:0.25rem}.text-center{text-align:center}.text-2xl{font-size:1.5rem;line-height:2rem}.text-lg{font-size:1.125rem;line-height:1.75rem}.text-sm{font-size:0.875rem;line-height:1.25rem}.font-bold{font-weight:700}.font-medium{font-weight:500}.font-semibold{font-weight:600}.leading-relaxed{line-height:1.625}.text-gray-300{--tw-text-opacity:1;color:rgb(209 213 219 / var(--tw-text-opacity, 1))}.text-green-400{--tw-text-opacity:1;color:rgb(74 222 128 / var(--tw-text-opacity, 1))}.opacity-80{opacity:0.8}.shadow-lg{--tw-shadow:0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);--tw-shadow-colored:0 10px 15px -3px var(--tw-shadow-color), 0 4px 6px -4px var(--tw-shadow-color);box-shadow:var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)}@media (min-width: 768px){.md\:grid-cols-2{grid-template-columns:repeat(2, minmax(0, 1fr))}.md\:grid-cols-3{grid-template-columns:repeat(3, minmax(0, 1fr))}}@media (min-width: 1024px){.lg\:hidden{display:none}}</style></head>
+
+  <body>
+    <!-- Table of Contents -->
+    <nav class="toc-fixed" id="toc">
+      <div class="toc-title">Contents</div>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#executive-summary" class="toc-link">Executive Summary</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#core-requirements" class="toc-link">1. Core Requirements</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#gameplay-needs" class="toc-link sub">1.1 Gameplay Needs</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#simulation-features" class="toc-link sub">1.2 Simulation Features</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#performance-constraints" class="toc-link sub">1.3 Performance Constraints</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#proposed-solution" class="toc-link">2. Proposed Solution</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#hybrid-overview" class="toc-link sub">2.1 Hybrid Approach</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#gpu-component" class="toc-link sub">2.2 GPU-Based Simulation</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#designer-zones" class="toc-link sub">2.3 Designer Zones</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#player-influence" class="toc-link sub">2.4 Player Influence</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#implementation" class="toc-link">3. Implementation</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#niagara-compute" class="toc-link sub">3.1 Niagara GPUCompute</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#velocity-grid" class="toc-link sub">3.2 VelocityGrid Setup</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#simulation-stages" class="toc-link sub">3.3 Simulation Stages</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#render-targets" class="toc-link sub">3.4 Render Targets</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#optimization" class="toc-link sub">3.5 Performance Optimization</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#pressure-temp" class="toc-link">4. Pressure &amp; Temperature</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#challenges" class="toc-link sub">4.1 Native Limitations</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#zone-strategy" class="toc-link sub">4.2 Zone Strategy</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#volume-systems" class="toc-link sub">4.3 Volume Systems</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#temp-modeling" class="toc-link sub">4.4 Temperature Modeling</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#modulation" class="toc-link sub">4.5 Wind Modulation</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#designer-control" class="toc-link">5. Designer Control</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#tools" class="toc-link sub">5.1 Design Tools</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#data-sampling" class="toc-link sub">5.2 Wind Data Sampling</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#player-techniques" class="toc-link sub">5.3 Player Techniques</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#visualization" class="toc-link sub">5.4 Visualization</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#technical-details" class="toc-link">6. Technical Details</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#data-interfaces" class="toc-link sub">6.1 Custom NDIs</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#data-exchange" class="toc-link sub">6.2 Data Exchange</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#integration" class="toc-link sub">6.3 Blueprint/C++</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#environmental" class="toc-link sub">6.4 Environment Interactions</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#alternatives" class="toc-link">7. Alternative Approaches</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#standard-wind" class="toc-link sub">7.1 Standard Components</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#physics-fields" class="toc-link sub">7.2 Physics Fields</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#houdini" class="toc-link sub">7.3 Houdini Offline</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#procedural" class="toc-link sub">7.4 Procedural Generation</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#conclusion" class="toc-link">8. Conclusion</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#summary" class="toc-link sub">8.1 System Summary</a>
+      <a href="https://www.kimi.com/preview/19815e6a-9de1-89f0-bccd-365bec0005df#future" class="toc-link sub">8.2 Future Work</a>
+    </nav>
+
+    <!-- Mobile TOC Toggle -->
+    <button class="lg:hidden fixed top-4 left-4 z-50 bg-white p-2 rounded-lg shadow-lg" onclick="toggleMobileTOC()">
+      <i class="fas fa-bars"></i>
+    </button>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Hero Section -->
+      <section class="hero-section" id="hero-bg"><span style="position: relative; z-index: 1;">
+        </span><div class="bento-grid" style="position: relative; z-index: 1;">
+          <div class="bento-main">
+            <h1 class="hero-title font-display">
+              <em>Real-Time Wind Simulation</em> for Kite Sailing in Unreal Engine
+            </h1>
+            <p class="hero-subtitle">
+              A hybrid approach combining GPU-based fluid dynamics with designer-controlled atmospheric systems for large open-world games
+            </p>
+            <div class="flex items-center space-x-4 text-sm text-muted">
+              <span><i class="fas fa-wind mr-2"></i>Fluid Dynamics</span>
+              <span><i class="fas fa-microchip mr-2"></i>GPU Compute</span>
+              <span><i class="fas fa-gamepad mr-2"></i>Gameplay Integration</span>
+            </div>
+          </div>
+          <div class="bento-side-1">
+            <img src="./Real-Time Wind Simulation for Kite Sailing in Unreal Engine_files/d14d3715a335ca55b58c19f91c92c08058fb0c02.jpeg" alt="3D visualization of wind flow simulation in Unreal Engine" class="w-full h-auto rounded-lg opacity-80" size="medium" aspect="wide" style="photo" query="Unreal Engine wind simulation visualization" referrerpolicy="no-referrer" data-modified="1" data-score="11496.00">
+          </div>
+          <div class="bento-side-2">
+            <div class="wind-visualization">
+              <i class="fas fa-wind"></i>
+              <div class="text-sm font-medium text-secondary">Dynamic Wind Flow</div>
+            </div>
+          </div>
+        </div><span style="position: relative; z-index: 1;">
+      </span><canvas data-engine="three.js r144" class="vanta-canvas" width="2191" height="890" style="display: block; position: absolute; z-index: 0; top: 0px; left: 0px; width: 1753px; height: 712px;"></canvas></section>
+
+      <!-- Executive Summary -->
+      <section id="executive-summary" class="content-section">
+        <div class="executive-summary">
+          <div class="summary-title">Executive Summary</div>
+          <p class="text-lg leading-relaxed mb-4">
+            This paper presents a <strong>hybrid wind simulation system</strong> for Unreal Engine that combines GPU-based fluid dynamics with designer-controlled atmospheric zones. The system addresses the challenge of creating realistic, interactive wind for kite sailing mechanics in large open-world games while maintaining performance across platforms including mobile.
+          </p>
+          <p class="text-lg leading-relaxed mb-4">
+            The proposed solution leverages Niagara's GPUCompute capabilities to simulate local wind flow on a dynamic 3D grid, while using designer-placed pressure and temperature zones to create global atmospheric patterns. This approach balances physical accuracy with artistic control, enabling complex environmental interactions and player-driven wind modifications.
+          </p>
+          <div class="grid md:grid-cols-3 gap-6 mt-6">
+            <div class="text-center">
+              <div class="text-2xl font-bold text-primary">60fps</div>
+              <div class="text-sm text-muted">Target Performance</div>
+            </div>
+            <div class="text-center">
+              <div class="text-2xl font-bold text-secondary">3D Grid</div>
+              <div class="text-sm text-muted">Dynamic Simulation</div>
+            </div>
+            <div class="text-center">
+              <div class="text-2xl font-bold text-accent">Hybrid</div>
+              <div class="text-sm text-muted">Approach</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Core Requirements -->
+      <section id="core-requirements" class="content-section">
+        <h2 class="section-header font-display">1. Core Requirements and Challenges</h2>
+
+        <div id="gameplay-needs">
+          <h3 class="subsection-header">1.1 Gameplay-Driven Wind Simulation Needs</h3>
+          <p>
+            The core requirement is to develop a <strong>real-time wind simulation system within Unreal Engine 5</strong> for a large open-world game set in a sky environment with floating islands. <strong>Wind is a central gameplay element</strong>, particularly for mechanics like kite sailing. This necessitates a simulation that is not only visually convincing but also <strong>physically interactive and responsive</strong> to the game world and player actions.
+          </p>
+
+          <div class="highlight-box">
+            <p class="font-medium text-primary mb-2">Key Challenge</p>
+            <p>The system must provide a sense of realism, where wind behaves plausibly in different environmental contexts, such as being blocked by obstacles or channeled through caves. This directly impacts the kite sailing experience, requiring the wind to provide tangible forces that players can utilize or counteract.</p>
+          </div>
+
+          <p>
+            The challenge lies in balancing the complexity of a realistic wind model with the performance demands of a large, open-world game, especially considering potential deployment on mobile platforms. The system must be robust enough to handle diverse environmental geometries, such as the undersides of islands or complex cave systems, and dynamic elements like rotating islands, ensuring that wind flow updates accordingly.
+          </p>
+        </div>
+
+        <div id="simulation-features" class="mt-8">
+          <h3 class="subsection-header">1.2 Key Simulation Features: Pressure, Temperature, and Dynamic Interaction</h3>
+          <p>
+            A critical aspect of the wind simulation is the <strong>incorporation of pressure and temperature as influencing factors</strong> on wind behavior. While a full meteorological simulation is not required, the system must account for these elements in a way that feels "<strong>realistic enough</strong>" for gameplay purposes.
+          </p>
+
+          <div class="image-container">
+            <img src="./Real-Time Wind Simulation for Kite Sailing in Unreal Engine_files/07adff81f5e4f987953466f0f8101d7d1e39cfb6.jpg" alt="Wind simulation interacting with a floating island" class="w-full max-w-2xl mx-auto" size="medium" aspect="wide" query="floating island wind simulation" referrerpolicy="no-referrer" data-modified="1" data-score="11598.00">
+            <div class="image-caption">Wind patterns around floating islands demonstrate environmental interaction</div>
+          </div>
+
+          <p>
+            <strong>Dynamic interaction with the environment is paramount</strong>. The wind must realistically flow around and interact with static and moving obstacles, such as floating islands, cave walls, and dynamically rotating landmasses. This includes creating sheltered areas where wind speed drops significantly, as well as areas where wind might be funneled or accelerated.
+          </p>
+        </div>
+
+        <div id="performance-constraints" class="mt-8">
+          <h3 class="subsection-header">1.3 Performance Constraints for Large Open Worlds and Mobile Platforms</h3>
+          <p>
+            The wind simulation system must be <strong>highly performant to support a large open-world game</strong>. This means it cannot rely on computationally expensive techniques that would be feasible only for small, confined environments. The solution needs to scale efficiently as the game world expands and as the complexity of environmental interactions increases.
+          </p>
+
+          <p>
+            A significant challenge is the <strong>potential requirement to run the game on mobile platforms</strong>, which have considerably less processing power and memory bandwidth compared to high-end PCs or consoles. This constraint rules out many brute-force fluid dynamics simulations or highly detailed volumetric approaches unless they can be heavily optimized or adapted.
+          </p>
+        </div>
+      </section>
+
+      <!-- Proposed Solution -->
+      <section id="proposed-solution" class="content-section">
+        <h2 class="section-header font-display">2. Proposed Solution: Hybrid Wind Simulation System</h2>
+
+        <div id="hybrid-overview">
+          <h3 class="subsection-header">2.1 Overview of the Hybrid Approach</h3>
+          <p>
+            The proposed solution is a <strong>hybrid wind simulation system</strong> that combines a <strong>GPU-accelerated fluid simulation for dynamic, local wind flow</strong> with <strong>designer-placed wind, pressure, and temperature zones</strong> to define broader global wind patterns and environmental influences.
+          </p>
+
+          <div class="pull-quote font-display">
+            "This approach aims to balance realism and performance by using a detailed simulation only where it's most needed and relying on more controlled, artist-driven setups for larger-scale effects."
+          </div>
+
+          <p>
+            The GPU-based component will handle the complex interactions of wind with dynamic obstacles and terrain, providing the "realistic enough" feel for kite sailing. The designer-controlled zones will allow for the definition of pressure systems and temperature variations that modulate the base wind, fulfilling the requirement for these atmospheric factors to influence wind behavior.
+          </p>
+        </div>
+
+        <div id="gpu-component" class="mt-8">
+          <h3 class="subsection-header">2.2 Component 1: GPU-Based Fluid Simulation for Dynamic Wind Flow</h3>
+          <p>
+            The first core component of the hybrid system is a <strong>GPU-based fluid simulation</strong>, likely implemented using Unreal Engine's Niagara visual effects system with its
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">GPUCompute Sim</code> capabilities <a href="https://blog.csdn.net/UWA4D/article/details/144130138" class="citation">[256]</a>. This simulation will model the wind as a fluid, calculating its velocity and behavior within a defined 3D grid, often referred to as a
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">VelocityGrid</code> <a href="https://blog.csdn.net/UWA4D/article/details/144130138" class="citation">[256]</a>.
+          </p>
+
+          <p>
+            The primary purpose of this component is to handle the <strong>dynamic and complex interactions of wind with the game environment</strong>, such as flowing around floating islands, through caves, and being affected by rotating structures. This local fluid simulation will provide the detailed, real-time wind vectors necessary for gameplay elements like kite sailing, where responsiveness and physical accuracy are crucial.
+          </p>
+        </div>
+
+        <div id="designer-zones" class="mt-8">
+          <h3 class="subsection-header">2.3 Component 2: Designer-Controlled Wind/Pressure/Temperature Zones</h3>
+          <p>
+            The second key component involves <strong>designer-controlled zones that define broader wind patterns, pressure systems, and temperature variations</strong> across the open world. These zones will act as inputs or boundary conditions for the more dynamic GPU-based fluid simulation.
+          </p>
+
+          <div class="highlight-box">
+            <p class="font-medium text-primary mb-2">Designer Workflow</p>
+            <p>Designers will be able to place these zones within the Unreal Editor, configuring parameters such as wind direction, speed, pressure values, and temperature. For example, a "high-pressure" zone could be set up to push wind towards a "low-pressure" zone, creating a prevailing wind direction in a region.</p>
+          </div>
+
+          <p>
+            These zones can be static or dynamic, allowing for changing weather patterns or scripted environmental events. The data from these zones will be used to influence the
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">VelocityGrid</code> in the GPU simulation, either by directly setting initial conditions, applying forces, or modulating the simulated wind vectors.
+          </p>
+        </div>
+
+        <div id="player-influence" class="mt-8">
+          <h3 class="subsection-header">2.4 Component 3: Player Influence on Local Wind State</h3>
+          <p>
+            The third component focuses on <strong>allowing players to influence the local wind state</strong>, which is crucial for a game where wind is a core gameplay element. This interaction can be achieved in several ways:
+          </p>
+
+          <ul class="list-disc list-inside space-y-2 mt-4 ml-4">
+            <li>The kite itself, as a physical object moving through the GPU-simulated wind field, will naturally interact with and perturb the wind.</li>
+            <li>Player actions or abilities could be designed to directly modify wind properties in their vicinity.</li>
+            <li>Special abilities might allow a player to create a temporary gust of wind in a desired direction, or to calm the wind around them.</li>
+          </ul>
+
+          <p class="mt-4">
+            The system needs to provide an API or a set of parameters that can be manipulated by gameplay code (e.g., via Blueprints or C++) to achieve these local modifications. The responsiveness of the GPU fluid simulation will be key here, ensuring that player-induced changes are reflected quickly and visibly in the wind's behavior.
+          </p>
+        </div>
+      </section>
+
+      <!-- Implementation -->
+      <section id="implementation" class="content-section">
+        <h2 class="section-header font-display">3. Implementing the GPU-Based Fluid Simulation</h2>
+
+        <div id="niagara-compute">
+          <h3 class="subsection-header">3.1 Leveraging Niagara's GPUCompute Sim for Performance</h3>
+          <p>
+            To achieve the necessary performance for a real-time wind simulation in a large open world, especially with an eye towards mobile platforms, the system will leverage Unreal Engine's Niagara visual effects system, specifically its <strong>
+              <code class="bg-gray-100 px-2 py-1 rounded text-sm">GPUCompute Sim</code> target
+            </strong>
+            <a href="https://blog.csdn.net/UWA4D/article/details/144130138" class="citation">[256]</a>. This allows the computationally intensive fluid dynamics calculations to be offloaded from the CPU to the GPU.
+          </p>
+
+          <p>
+            By configuring a Niagara emitter to run on
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">GPUCompute Sim</code>, developers can write custom HLSL shader code within Niagara modules to perform the wind simulation. This approach is more performant than relying solely on CPU-based calculations or less optimized Niagara particle systems.
+          </p>
+        </div>
+
+        <div id="velocity-grid" class="mt-8">
+          <h3 class="subsection-header">3.2 Simulating Wind Velocity on a 3D Grid (VelocityGrid)</h3>
+          <p>
+            The core of the dynamic wind simulation will be a <strong>3D grid, often referred to as a
+              <code class="bg-gray-100 px-2 py-1 rounded text-sm">VelocityGrid</code>
+            </strong> when implemented within Niagara's
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">Grid3D Collection</code> framework <a href="https://blog.csdn.net/UWA4D/article/details/144130138" class="citation">[256]</a>. This grid will discretize a portion of the game world into voxels, with each voxel storing a 3D velocity vector representing the wind's speed and direction at that point in space.
+          </p>
+
+          <div class="image-container">
+            <img src="./Real-Time Wind Simulation for Kite Sailing in Unreal Engine_files/e4942b3c0d5efbddd933b6caf0fdd4dc1eedeeb1.gif" alt="3D grid representation of wind velocity vectors in fluid simulation" class="w-full max-w-xl mx-auto" size="medium" aspect="wide" style="linedrawing" query="3D grid wind velocity vectors fluid simulation" referrerpolicy="no-referrer" data-modified="1" data-score="11497.00">
+            <div class="image-caption">3D velocity grid structure for wind simulation</div>
+          </div>
+
+          <p>
+            The <strong>resolution of this grid</strong> (i.e., the number of voxels and their physical size) will be a critical trade-off between simulation detail and performance. A higher resolution grid will capture finer details of wind flow around obstacles but will also increase the computational cost.
+          </p>
+        </div>
+
+        <div id="simulation-stages" class="mt-8">
+          <h3 class="subsection-header">3.3 Key Simulation Stages: Add Source, Diffuse, Advect, Project</h3>
+          <p>
+            The GPU-based fluid simulation will implement several key stages, typically executed in sequence within Niagara's simulation loop, to update the
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">VelocityGrid</code> each frame <a href="https://blog.csdn.net/UWA4D/article/details/144130138" class="citation">[256]</a>:
+          </p>
+
+          <div class="grid md:grid-cols-2 gap-6 mt-6">
+            <div class="highlight-box">
+              <h4 class="font-semibold text-primary mb-2">1. Add Source (外力项)</h4>
+              <p class="text-sm">Introduces external forces from wind zones, player actions, or moving objects into the velocity field.</p>
+            </div>
+            <div class="highlight-box">
+              <h4 class="font-semibold text-primary mb-2">2. Diffuse (扩散项)</h4>
+              <p class="text-sm">Simulates the diffusion of velocity, representing viscosity or gradual dissipation of wind energy.</p>
+            </div>
+            <div class="highlight-box">
+              <h4 class="font-semibold text-primary mb-2">3. Advect (平流项)</h4>
+              <p class="text-sm">Process by which wind carries its own properties along with its flow, creating coherent wind streams.</p>
+            </div>
+            <div class="highlight-box">
+              <h4 class="font-semibold text-primary mb-2">4. Project (投射项)</h4>
+              <p class="text-sm">Ensures the velocity field remains divergence-free, crucial for realistic fluid behavior around obstacles.</p>
+            </div>
+          </div>
+        </div>
+
+        <div id="render-targets" class="mt-8">
+          <h3 class="subsection-header">3.4 Outputting Velocity Data to Render Targets (RT_WindField, RT_Data)</h3>
+          <p>
+            Once the
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">VelocityGrid</code> has been updated through the simulation stages, its data needs to be made accessible to other parts of the game. This is typically achieved by <strong>writing the 3D velocity vectors from the VelocityGrid to 2D render targets (RTs)</strong>
+            <a href="https://blog.csdn.net/UWA4D/article/details/144130138" class="citation">[256]</a>.
+          </p>
+
+          <div class="code-block">
+            <div class="text-green-400 mb-2">// Render Target Configuration</div>
+            <div class="text-gray-300">
+              RT_WindField: Stores XYZ velocity vectors in RGB channels
+              <br>
+              RT_Data: Stores grid metadata (position, size, resolution)
+              <br>
+              <br>
+              // Grid resolution (Nx, Ny, Nz) → RT_WindField dimensions Nx × (Ny * Nz)
+              <br>
+              // Each slice of the 3D grid is laid out sequentially in the 2D texture
+            </div>
+          </div>
+
+          <p>
+            A Niagara function script (
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">NFS_ParseWindFieldData</code>) can be created to parse this
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">RT_Data</code> and extract parameters <a href="https://blog.csdn.net/UWA4D/article/details/144130138" class="citation">[256]</a>. A separate Niagara module script (
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">NMS_WindForce</code>) can then be used in other particle systems to sample the
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">RT_WindField</code> using the information from
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">RT_Data</code>
+            <a href="https://blog.csdn.net/UWA4D/article/details/144130138" class="citation">[256]</a>.
+          </p>
+        </div>
+
+        <div id="optimization" class="mt-8">
+          <h3 class="subsection-header">3.5 Optimizing Performance: Localized Simulation Grid Following Player</h3>
+          <p>
+            A critical performance optimization for a large open world is to <strong>localize the fluid simulation grid around the player or areas of interest</strong>, rather than simulating the entire game world at once. This technique, referenced as being used in <em>God of War</em> for their wind system, involves having a relatively small, fixed-size
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">VelocityGrid</code> that moves with the player <a href="https://blog.csdn.net/UWA4D/article/details/144130138" class="citation">[256]</a>.
+          </p>
+
+          <div class="highlight-box">
+            <p class="font-medium text-primary mb-2">Performance Impact</p>
+            <p>The simulation calculations are confined to this limited volume, significantly reducing the computational load. As the player moves, the wind field information within the grid is advected in the opposite direction of the player's movement, creating the illusion of a persistent, global wind field without actually simulating it all.</p>
+          </div>
+
+          <p>
+            The parameters for this localized grid, such as its world position (
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">WorldPosition</code>), size (
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">FieldSize</code>), and the player's previous frame position (
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">LastFramePosition</code>) for calculating the advection offset, are typically passed from a Blueprint actor to the Niagara system <a href="https://blog.csdn.net/UWA4D/article/details/144130138" class="citation">[256]</a>.
+          </p>
+        </div>
+      </section>
+
+      <!-- Pressure and Temperature -->
+      <section id="pressure-temp" class="content-section">
+        <h2 class="section-header font-display">4. Integrating Pressure and Temperature Effects</h2>
+
+        <div id="challenges">
+          <h3 class="subsection-header">4.1 Challenges with Native Niagara Fluids Pressure/Temperature Output</h3>
+          <p>
+            While Niagara's built-in fluid simulation capabilities, such as the "Grid3D Gas Master Emitter," do offer options for temperature and density grids, and even a "Pressure Solve Iterations" parameter <a href="https://dev.epicgames.com/community/learning/tutorials/qjrY/unreal-engine-niagara-fluids-exploring-the-3d-gas-emitter" class="citation">[305]</a>, directly using these for a custom wind simulation that explicitly models pressure and temperature as separate, designer-controllable entities presents challenges.
+          </p>
+
+          <p>
+            The "pressure solve" in typical incompressible fluid solvers is an internal step to ensure mass conservation and divergence-free velocity fields. <strong>It's not typically exposed or designed to be an artist-controllable "pressure system"</strong> in the meteorological sense. Therefore, a custom approach is needed to represent these larger-scale atmospheric properties and have them influence the local, dynamic wind simulation in a meaningful way for gameplay.
+          </p>
+        </div>
+
+        <div id="zone-strategy" class="mt-8">
+          <h3 class="subsection-header">4.2 Strategy: Procedural and Designer-Defined Pressure/Temperature Zones</h3>
+          <p>
+            To address the requirement for pressure and temperature to influence wind, a strategy involving both <strong>procedural generation and designer-defined zones</strong> will be employed. Designers will be able to place "pressure zones" and "temperature zones" within the Unreal Editor.
+          </p>
+
+          <div class="pull-quote font-display">
+            "These zones will define scalar fields representing pressure values and temperature values, with various shapes, falloffs, intensities, and potentially animation or script-driven behaviors."
+          </div>
+
+          <p>
+            These pressure and temperature fields will then be used to influence the
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">VelocityGrid</code> in the GPU-based fluid simulation. For instance, a pressure gradient between two zones could create a force that accelerates the wind within the simulation grid from high to low pressure.
+          </p>
+        </div>
+
+        <div id="volume-systems" class="mt-8">
+          <h3 class="subsection-header">4.3 Using Volumes and Noise Fields to Represent Pressure Systems</h3>
+          <p>
+            <strong>Designer-controlled volumes</strong> (e.g.,
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">Box Volumes</code>,
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">Sphere Volumes</code>, or custom
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">Volume</code> actors) will be the primary tool for defining pressure systems. Each volume can be tagged or given a component that specifies its pressure value (e.g., a scalar like 1015 hPa for high pressure, 1000 hPa for low pressure) and its influence radius or falloff.
+          </p>
+
+          <div class="image-container">
+            <img src="./Real-Time Wind Simulation for Kite Sailing in Unreal Engine_files/2e1db019c8e07232fd957b3648b3c90fa8dcfe7c.jpg" alt="Atmospheric pressure zones visualized with color gradients" class="w-full max-w-2xl mx-auto" size="medium" aspect="wide" query="atmospheric pressure zones visualization" referrerpolicy="no-referrer" data-modified="1" data-score="11578.00">
+            <div class="image-caption">Pressure zones with visual falloff gradients</div>
+          </div>
+
+          <p>
+            To create smooth transitions and more natural-looking pressure fields, <strong>noise functions (e.g., Perlin or Simplex noise)</strong> can be used to perturb the pressure values defined by the volumes or to generate entirely procedural pressure patterns. This allows designers to craft believable large-scale wind patterns, such as trade winds or prevailing westerlies, by strategically placing these pressure volumes.
+          </p>
+        </div>
+
+        <div id="temp-modeling" class="mt-8">
+          <h3 class="subsection-header">4.4 Modeling Temperature Variations (e.g., Thermals, Altitude Effects)</h3>
+          <p>
+            <strong>Temperature variations will be modeled similarly to pressure</strong>, using designer-placed zones and procedural noise. Temperature zones can represent warm surfaces (like sun-baked islands or geothermal vents) that generate thermals (rising warm air) or cold areas that might cause downdrafts.
+          </p>
+
+          <p>
+            The Niagara fluid simulation component can directly utilize a
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">Temperature</code> grid attribute, as mentioned in the "Niagara Fluids: Exploring the 3D Gas Emitter" documentation <a href="https://dev.epicgames.com/community/learning/tutorials/qjrY/unreal-engine-niagara-fluids-exploring-the-3d-gas-emitter" class="citation">[305]</a>. This temperature field can then drive buoyancy forces within the simulation.
+          </p>
+
+          <div class="highlight-box">
+            <p class="font-medium text-primary mb-2">Altitude Effects</p>
+            <p>Altitude effects on temperature (e.g., temperature decreasing with height) can be modeled by defining temperature zones that vary with altitude or by procedurally generating a temperature gradient based on the Y-coordinate of the VelocityGrid cells.</p>
+          </div>
+        </div>
+
+        <div id="modulation" class="mt-8">
+          <h3 class="subsection-header">4.5 Modulating Base Wind Velocity with Pressure/Temperature Zone Data</h3>
+          <p>
+            The data from the designer-defined pressure and temperature zones, along with any procedural elements, will be used to <strong>modulate the behavior of the wind within the GPU-based fluid simulation</strong>. This modulation can happen at several stages:
+          </p>
+
+          <ul class="list-disc list-inside space-y-2 mt-4 ml-4">
+            <li>The pressure gradient calculated from the pressure field can be directly applied as an external force in the "Add Source" stage of the fluid simulation.</li>
+            <li>The temperature field can influence the simulation through buoyancy forces, with warmer air experiencing upward force and cooler air sinking.</li>
+            <li>The combination of pressure-driven forces and temperature-induced buoyancy will result in a more complex and realistic wind field.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Designer Control -->
+      <section id="designer-control" class="content-section">
+        <h2 class="section-header font-display">5. Enabling Designer Control and Player Interaction</h2>
+
+        <div id="tools">
+          <h3 class="subsection-header">5.1 Designer Tools: Placing and Configuring Wind/Pressure/Temperature Zones</h3>
+          <p>
+            To empower designers in shaping the wind behavior across the game world, a set of <strong>intuitive tools within the Unreal Editor</strong> will be developed. These tools will allow designers to place, configure, and visualize wind, pressure, and temperature zones.
+          </p>
+
+          <div class="grid md:grid-cols-3 gap-6 mt-6">
+            <div class="highlight-box">
+              <h4 class="font-semibold text-primary mb-2">Wind Zones</h4>
+              <p class="text-sm">Parameters: base wind direction, speed, turbulence intensity, gust frequency</p>
+            </div>
+            <div class="highlight-box">
+              <h4 class="font-semibold text-secondary mb-2">Pressure Zones</h4>
+              <p class="text-sm">Parameters: high/low pressure intensity, falloff, dynamic behavior</p>
+            </div>
+            <div class="highlight-box">
+              <h4 class="font-semibold text-accent mb-2">Temperature Zones</h4>
+              <p class="text-sm">Parameters: heat/cold sources, thermal strength, altitude effects</p>
+            </div>
+          </div>
+
+          <p class="mt-6">
+            Each zone type would have properties editable in the Details panel, allowing for fine-tuning of its influence. Visualizers in the editor viewport would show the extent and strength of these zones, helping designers to understand how they interact and affect the overall wind patterns.
+          </p>
+        </div>
+
+        <div id="data-sampling" class="mt-8">
+          <h3 class="subsection-header">5.2 Sampling Wind Data (Velocity, Pressure, Temperature) for Gameplay</h3>
+          <p>
+            For gameplay mechanics, particularly kite sailing, it's essential to be able to <strong>sample the current wind conditions (velocity, and potentially pressure and temperature)</strong> at any given point in the world. The primary data source for dynamic wind velocity will be the
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">RT_WindField</code> render target, which stores the output of the GPU fluid simulation <a href="https://blog.csdn.net/UWA4D/article/details/144130138" class="citation">[256]</a>.
+          </p>
+
+          <div class="code-block">
+            <div class="text-green-400 mb-2">// Wind Data Sampling Process</div>
+            <div class="text-gray-300">
+              1. Access RT_Data for grid world position, size, resolution
+              <br>
+              2. Transform query world position to grid local space
+              <br>
+              3. Convert local 3D position to RT_WindField UV coordinate
+              <br>
+              4. Sample RT_WindField texture to retrieve 3D wind velocity
+              <br>
+              <br>
+              // Efficient GPU-to-GPU sampling for physics and effects
+            </div>
+          </div>
+
+          <p>
+            This sampled data can then be used by the kite sailing physics, by AI agents reacting to wind, or by visual effects that need to align with the wind. The efficiency of this sampling process is critical, especially if many queries are made per frame.
+          </p>
+        </div>
+
+        <div id="player-techniques" class="mt-8">
+          <h3 class="subsection-header">5.3 Techniques for Player-Driven Local Wind State Changes</h3>
+          <p>
+            Allowing players to influence the local wind state is a key gameplay requirement. Several techniques can be employed, primarily leveraging the GPU-based fluid simulation:
+          </p>
+
+          <div class="highlight-box">
+            <p class="font-medium text-primary mb-2">Player Interaction Methods</p>
+            <ul class="list-disc list-inside space-y-1 text-sm">
+              <li><strong>Direct Force Application:</strong> Player abilities apply impulses or sustained forces to specific regions of the VelocityGrid</li>
+              <li><strong>Obstruction/Wind Shadows:</strong> Player characters or controlled objects act as obstacles within the fluid simulation</li>
+              <li><strong>Zone Interaction:</strong> Players modify existing designer-placed wind, pressure, or temperature zones</li>
+              <li><strong>Spawnable Local Wind Fields:</strong> Player actions spawn temporary, localized wind field actors</li>
+            </ul>
+          </div>
+
+          <p class="mt-4">
+            These techniques require a clear interface between the gameplay logic (handled in Blueprints or C++) and the Niagara fluid simulation, allowing parameters of the simulation to be modified at runtime based on player input.
+          </p>
+        </div>
+
+        <div id="visualization" class="mt-8">
+          <h3 class="subsection-header">5.4 Visualizing Wind Fields and Zones for Debugging and Design</h3>
+          <p>
+            Effective visualization tools are crucial for both debugging the wind simulation and for designers to understand and author wind, pressure, and temperature zones.
+          </p>
+
+          <div class="grid md:grid-cols-2 gap-6 mt-6">
+            <div>
+              <h4 class="font-semibold text-primary mb-2">GPU Fluid Simulation Visualization</h4>
+              <ul class="list-disc list-inside space-y-1 text-sm">
+                <li>Particle advection with streamlines</li>
+                <li>Vector field display with arrows</li>
+                <li>Render target debugging views</li>
+              </ul>
+            </div>
+            <div>
+              <h4 class="font-semibold text-secondary mb-2">Designer Zone Visualization</h4>
+              <ul class="list-disc list-inside space-y-1 text-sm">
+                <li>Volume outlines with color-coding</li>
+                <li>Parameter visualization within zones</li>
+                <li>Flow visualization with streamlines</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Technical Details -->
+      <section id="technical-details" class="content-section">
+        <h2 class="section-header font-display">6. Technical Implementation Details</h2>
+
+        <div id="data-interfaces">
+          <h3 class="subsection-header">6.1 Creating Custom Niagara Data Interfaces for Wind Sampling</h3>
+          <p>
+            To facilitate efficient and flexible sampling of wind data (velocity, pressure, temperature) from Blueprints or C++ game logic, <strong>custom Niagara Data Interfaces (NDIs)</strong> will be developed. An NDI allows custom C++ code to be exposed to the Niagara visual scripting environment and vice-versa.
+          </p>
+
+          <p>
+            For wind sampling, an NDI could be created that takes a world position as input and returns the sampled wind velocity vector. Internally, this NDI would handle the logic of accessing the
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">RT_Data</code> and
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">RT_WindField</code> render targets, performing the necessary coordinate transformations and texture lookups.
+          </p>
+
+          <div class="highlight-box">
+            <p class="font-medium text-primary mb-2">NDI Benefits</p>
+            <p>These NDIs would allow gameplay scripts to easily query the wind state at any point, which is essential for mechanics like kite sailing, AI navigation based on wind, or triggering wind-responsive visual and audio effects. The C++ implementation can be optimized for performance.</p>
+          </div>
+        </div>
+
+        <div id="data-exchange" class="mt-8">
+          <h3 class="subsection-header">6.2 Utilizing Render Targets for Data Exchange</h3>
+          <p>
+            <strong>Render Targets (RTs) will play a crucial role in data exchange</strong> between different parts of the wind simulation system, particularly between the GPU-based fluid simulation in Niagara and other engine systems or game logic. As detailed previously, the primary output of the fluid simulation, the
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">VelocityGrid</code>, will be written to a
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">RT_WindField</code>
+            <a href="https://blog.csdn.net/UWA4D/article/details/144130138" class="citation">[256]</a>.
+          </p>
+
+          <p>
+            This two-RT system allows any part of the game that needs wind information to sample these textures. The sampling can be done within Niagara itself using texture sample nodes, or from Blueprints/C++ using Unreal's rendering API to read pixels from the RTs. Render targets are also a common way to pass data between different Niagara systems or emitters.
+          </p>
+        </div>
+
+        <div id="integration" class="mt-8">
+          <h3 class="subsection-header">6.3 Blueprint and C++ Integration for Game Logic</h3>
+          <p>
+            The wind simulation system will require <strong>tight integration between Blueprints (for designer accessibility and rapid prototyping) and C++ (for performance-critical components and low-level engine access)</strong>.
+          </p>
+
+          <div class="grid md:grid-cols-2 gap-6 mt-6">
+            <div class="highlight-box">
+              <h4 class="font-semibold text-primary mb-2">C++ Components</h4>
+              <ul class="list-disc list-inside space-y-1 text-sm">
+                <li>Core fluid simulation management</li>
+                <li>Render target initialization</li>
+                <li>Custom Niagara Data Interfaces</li>
+                <li>Performance-critical operations</li>
+              </ul>
+            </div>
+            <div class="highlight-box">
+              <h4 class="font-semibold text-secondary mb-2">Blueprint Components</h4>
+              <ul class="list-disc list-inside space-y-1 text-sm">
+                <li>Designer zone placement and configuration</li>
+                <li>Gameplay logic for kite sailing</li>
+                <li>Player ability implementation</li>
+                <li>Visual effects and audio triggers</li>
+              </ul>
+            </div>
+          </div>
+
+          <p>
+            The core fluid simulation logic, including the advection, diffusion, and projection stages, will likely be implemented in HLSL within Niagara modules for GPU execution <a href="https://blog.csdn.net/UWA4D/article/details/144130138" class="citation">[256]</a>. However, the management of this simulation can be driven by a C++ actor or component that exposes properties and functions to Blueprints.
+          </p>
+        </div>
+
+        <div id="environmental" class="mt-8">
+          <h3 class="subsection-header">6.4 Handling Environmental Interactions (Caves, Rotating Islands)</h3>
+          <p>
+            A key requirement is that the <strong>wind simulation must dynamically interact with the environment</strong>, including static geometry like caves and dynamic objects like rotating islands. The GPU-based fluid simulation, with its
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">VelocityGrid</code>, is well-suited to handle these interactions.
+          </p>
+
+          <div class="highlight-box">
+            <p class="font-medium text-primary mb-2">Static Geometry Handling</p>
+            <p>For static geometry (caves, island surfaces), the fluid simulation treats solid geometry as obstacles. This is handled in the "Project" stage, where boundary conditions are enforced. Each grid cell is checked against collision geometry, with cells inside obstacles set to zero velocity.</p>
+          </div>
+
+          <div class="highlight-box mt-4">
+            <p class="font-medium text-secondary mb-2">Dynamic Object Interaction</p>
+            <p>Rotating islands or other moving objects impart momentum to the air. In the "Add Source" stage, the velocity of dynamic objects is transferred to VelocityGrid cells they occupy or influence, making wind "stick" to and be carried along by moving surfaces.</p>
+          </div>
+
+          <p class="mt-4">
+            These interactions are computationally intensive if done naively for every triangle in the scene. Optimization techniques like spatial partitioning will be necessary to efficiently query which parts of the environment affect the
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">VelocityGrid</code>.
+          </p>
+        </div>
+      </section>
+
+      <!-- Alternative Approaches -->
+      <section id="alternatives" class="content-section">
+        <h2 class="section-header font-display">7. Alternative and Complementary Approaches (Considered)</h2>
+
+        <div id="standard-wind">
+          <h3 class="subsection-header">7.1 Standard Unreal Wind Components (Limitations)</h3>
+          <p>
+            Unreal Engine provides standard components like the
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">WindDirectionalSource</code> actor. While useful for simple, global wind effects on foliage and particle systems, it has <strong>significant limitations for the described requirements</strong>
+            <a href="https://forums.unrealengine.com/t/need-help-with-wind-directional-source/292543" class="citation">[40]</a>.
+          </p>
+
+          <p>
+            The
+            <code class="bg-gray-100 px-2 py-1 rounded text-sm">WindDirectionalSource</code> primarily affects visual elements like SpeedTree assets and GPU particles, and its influence on physics objects is indirect or non-existent without custom scripting <a href="https://forums.unrealengine.com/t/does-wind-directional-source-affect-physics-actors/286049" class="citation">[161]</a>. It does not inherently simulate complex fluid dynamics, pressure, temperature, or detailed environmental interactions like wind flowing around obstacles or through caves.
+          </p>
+
+          <div class="highlight-box">
+            <p class="font-medium text-primary mb-2">Limitation Summary</p>
+            <p>While standard wind components might serve as a fallback for very distant or low-detail wind, they cannot be the core of the proposed solution due to their lack of local dynamism and interactivity needed for kite sailing in a complex environment.</p>
+          </div>
+        </div>
+
+        <div id="physics-fields" class="mt-8">
+          <h3 class="subsection-header">7.2 Physics Fields for Data Representation</h3>
+          <p>
+            Unreal Engine's <strong>Physics Fields system</strong> was considered as a potential way to represent wind data <a href="https://dev.epicgames.com/community/learning/tutorials/Y5p7/unreal-engine-world-physics-fields" class="citation">[117]</a>. Physics Fields are global containers for int, float, and vector channels that can be queried by Chaos, Blueprints, Niagara, and materials <a href="https://dev.epicgames.com/community/learning/tutorials/Y5p7/unreal-engine-world-physics-fields" class="citation">[223]</a>.
+          </p>
+
+          <p>
+            However, while Physics Fields are excellent for <em>storing</em> and <em>distributing</em> such data, <strong>they do not inherently provide the <em>simulation</em> logic</strong> required for dynamic wind flow, pressure gradients, or temperature effects. The system would still need a separate mechanism (like the proposed GPU fluid simulation) to calculate how wind velocity changes over time and in response to environmental factors.
+          </p>
+        </div>
+
+        <div id="houdini" class="mt-8">
+          <h3 class="subsection-header">7.3 Houdini for Offline Simulation and Data Baking</h3>
+          <p>
+            For achieving highly detailed and physically accurate wind interactions with complex static geometry, using an external Digital Content Creation (DCC) tool like <strong>Houdini for offline simulation</strong> was considered. Houdini has powerful computational fluid dynamics (CFD) tools that can simulate wind flow around imported Unreal Engine geometry.
+          </p>
+
+          <div class="image-container">
+            <img src="./Real-Time Wind Simulation for Kite Sailing in Unreal Engine_files/f5d12db2fdb399460a23565aaed8490919f83bae.jpg" alt="Houdini software interface showing wind simulation setup" class="w-full max-w-xl mx-auto" size="medium" aspect="wide" style="photo" query="Houdini wind simulation interface" referrerpolicy="no-referrer" data-modified="1" data-score="11594.00">
+            <div class="image-caption">Houdini CFD workflow for offline wind simulation</div>
+          </div>
+
+          <p>
+            This approach offers <strong>high fidelity for pre-defined environments</strong> and can be very performant at runtime since the complex simulation is done offline. However, it is <strong>less suitable for fully dynamic environments</strong> (like rotating islands whose influence changes) or for player-driven local wind changes, unless the baking process is very rapid or only used for static elements.
+          </p>
+        </div>
+
+        <div id="procedural" class="mt-8">
+          <h3 class="subsection-header">7.4 Procedural Wind Generation Techniques</h3>
+          <p>
+            Beyond direct simulation, various <strong>procedural wind generation techniques</strong> were considered. These methods typically involve using mathematical functions, noise algorithms (like Perlin or Simplex noise), and vector operations to create wind patterns.
+          </p>
+
+          <div class="highlight-box">
+            <p class="font-medium text-primary mb-2">Procedural Advantages</p>
+            <p>These procedural approaches can be <strong>very performant</strong> and are often used for visual wind effects on foliage or particles. They could serve as a good starting point for a base wind field, or to add high-frequency detail on top of a more physically-based simulation.</p>
+          </div>
+
+          <p>
+            However, for a core gameplay element like kite sailing that requires physically plausible interactions with the environment and responsiveness to pressure/temperature, <strong>purely procedural wind might not be "realistic enough" on its own</strong>. It can be challenging to make procedural wind convincingly interact with complex obstacles or to model phenomena like pressure gradients without it feeling artificial.
+          </p>
+        </div>
+      </section>
+
+      <!-- Conclusion -->
+      <section id="conclusion" class="content-section">
+        <h2 class="section-header font-display">8. Conclusion and Future Work</h2>
+
+        <div id="summary">
+          <h3 class="subsection-header">8.1 Summary of the Hybrid Wind Simulation System</h3>
+          <p>
+            The proposed <strong>hybrid wind simulation system</strong> offers a robust and performant solution for integrating wind as a core gameplay element in a large open-world Unreal Engine game, particularly for activities like kite sailing. By combining a <strong>GPU-accelerated local fluid simulation</strong> for dynamic wind flow and environmental interactions with <strong>designer-controlled pressure and temperature zones</strong> for broader atmospheric effects, the system achieves a balance between realism and performance.
+          </p>
+
+          <div class="grid md:grid-cols-2 gap-6 mt-6">
+            <div class="highlight-box">
+              <h4 class="font-semibold text-primary mb-2">Key Features</h4>
+              <ul class="list-disc list-inside space-y-1 text-sm">
+                <li>GPU-accelerated 3D grid simulation</li>
+                <li>Designer-controlled atmospheric zones</li>
+                <li>Environmental interaction handling</li>
+                <li>Player influence mechanisms</li>
+              </ul>
+            </div>
+            <div class="highlight-box">
+              <h4 class="font-semibold text-secondary mb-2">Technical Achievements</h4>
+              <ul class="list-disc list-inside space-y-1 text-sm">
+                <li>Real-time performance optimization</li>
+                <li>Render target data exchange</li>
+                <li>Custom Niagara Data Interfaces</li>
+                <li>Mobile platform support</li>
+              </ul>
+            </div>
+          </div>
+
+          <p class="mt-6">
+            This hybrid approach ensures that wind behaves plausibly, interacts with the environment (including caves and rotating islands), and supports both designer creativity and player agency.
+          </p>
+        </div>
+
+        <div id="future" class="mt-8">
+          <h3 class="subsection-header">8.2 Potential for Extension and Optimization</h3>
+          <p>
+            The hybrid wind simulation system has several avenues for future extension and optimization. <strong>Performance optimization</strong> will be an ongoing effort, particularly focusing on the Niagara fluid simulation's grid resolution, iteration counts, and the efficiency of sampling pressure/temperature zones, especially for mobile platforms.
+          </p>
+
+          <div class="pull-quote font-display">
+            "Future work includes adaptive grid resolution, enhanced visual fidelity, improved designer tools, extended physical models, and advanced AI integration for wind-aware behaviors."
+          </div>
+
+          <p>
+            The <strong>visual fidelity of wind representation</strong> can be enhanced with more sophisticated particle effects, volumetric rendering for dense fog or clouds affected by wind, and improved material responses for foliage and cloth. The <strong>designer tools for placing and visualizing zones</strong> can be further refined, potentially incorporating more intuitive ways to paint pressure/temperature fields or to define complex interactions between zones.
+          </p>
+
+          <div class="wind-visualization mt-8">
+            <i class="fas fa-wind"></i>
+            <div class="text-lg font-medium text-secondary mb-2">Future Wind Simulation</div>
+            <div class="text-sm text-muted">Continuing innovation in real-time atmospheric dynamics</div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+        // Initialize Vanta.js background
+        VANTA.WAVES({
+            el: "#hero-bg",
+            mouseControls: true,
+            touchControls: true,
+            gyroControls: false,
+            minHeight: 200.00,
+            minWidth: 200.00,
+            scale: 1.00,
+            scaleMobile: 1.00,
+            color: 0x1e3a8a,
+            shininess: 30.00,
+            waveHeight: 15.00,
+            waveSpeed: 0.75,
+            zoom: 0.75
+        });
+        
+        // Table of Contents functionality
+        function updateActiveLink() {
+            const sections = document.querySelectorAll('section[id], div[id]');
+            const tocLinks = document.querySelectorAll('.toc-link');
+            
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                const sectionHeight = section.clientHeight;
+                if (window.pageYOffset >= sectionTop - 200) {
+                    current = section.getAttribute('id');
+                }
+            });
+            
+            tocLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href') === '#' + current) {
+                    link.classList.add('active');
+                }
+            });
+        }
+        
+        // Mobile TOC toggle
+        function toggleMobileTOC() {
+            const toc = document.getElementById('toc');
+            toc.classList.toggle('mobile-open');
+        }
+        
+        // Close mobile TOC when clicking outside
+        document.addEventListener('click', function(event) {
+            const toc = document.getElementById('toc');
+            const toggleButton = document.querySelector('button.lg\\:hidden');
+            
+            // Check if click is outside TOC and toggle button
+            if (toc.classList.contains('mobile-open') && 
+                !toc.contains(event.target) && 
+                event.target !== toggleButton && 
+                !toggleButton.contains(event.target)) {
+                toc.classList.remove('mobile-open');
+            }
+        });
+        
+        // Smooth scrolling for TOC links
+        document.querySelectorAll('.toc-link').forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                const targetId = this.getAttribute('href').substring(1);
+                const targetElement = document.getElementById(targetId);
+                if (targetElement) {
+                    targetElement.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+                
+                // Close mobile TOC if open
+                if (window.innerWidth < 1024) {
+                    document.getElementById('toc').classList.remove('mobile-open');
+                }
+            });
+        });
+        
+        // Update active link on scroll
+        window.addEventListener('scroll', updateActiveLink);
+        
+        // Initial call
+        updateActiveLink();
+        
+        // Reset mobile TOC state on desktop resize
+        window.addEventListener('resize', function() {
+            const toc = document.getElementById('toc');
+            if (window.innerWidth >= 1024) {
+                toc.classList.remove('mobile-open');
+            }
+        });
+    </script>
+  
+
+</body></html>
