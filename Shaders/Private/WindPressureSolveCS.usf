@@ -1,0 +1,66 @@
+#include "/Engine/Public/Platform.ush"
+
+RWTexture3D<float4> VelocityField;
+RWTexture3D<float> PressureFieldRead;
+RWTexture3D<float> PressureFieldWrite;
+float3 GridSize;
+float PressureTolerance;
+
+#define THREADS_PER_GROUP 8
+
+bool IsValidCell(uint3 coord)
+{
+    return all(coord < GridSize) && all(coord >= 0);
+}
+
+float4 SampleVelocity(uint3 coord)
+{
+    if (!IsValidCell(coord))
+        return float4(0, 0, 0, 0);
+    return VelocityField[coord];
+}
+
+float SamplePressure(uint3 coord, Texture3D<float> pressureTex)
+{
+    if (!IsValidCell(coord))
+        return 0.0;
+    return pressureTex[coord];
+}
+
+float CalculateDivergence(uint3 DTid)
+{
+    float3 h = 1.0 / GridSize;
+    float3 halfrdx = 0.5 * h;
+
+    float4 vxp = SampleVelocity(uint3(DTid.x + 1, DTid.y, DTid.z));
+    float4 vxm = SampleVelocity(uint3(DTid.x - 1, DTid.y, DTid.z));
+    float4 vyp = SampleVelocity(uint3(DTid.x, DTid.y + 1, DTid.z));
+    float4 vym = SampleVelocity(uint3(DTid.x, DTid.y - 1, DTid.z));
+    float4 vzp = SampleVelocity(uint3(DTid.x, DTid.y, DTid.z + 1));
+    float4 vzm = SampleVelocity(uint3(DTid.x, DTid.y, DTid.z - 1));
+
+    return halfrdx.x * (vxp.x - vxm.x) +
+           halfrdx.y * (vyp.y - vym.y) +
+           halfrdx.z * (vzp.z - vzm.z);
+}
+
+[numthreads(THREADS_PER_GROUP, THREADS_PER_GROUP, THREADS_PER_GROUP)]
+void MainCS(uint3 DTid : SV_DispatchThreadID)
+{
+    if (any(DTid >= GridSize))
+        return;
+
+    float div = CalculateDivergence(DTid);
+    
+    // For first iteration, initialize with divergence
+    float p0 = SamplePressure(uint3(DTid.x - 1, DTid.y, DTid.z), PressureFieldRead);
+    float p1 = SamplePressure(uint3(DTid.x + 1, DTid.y, DTid.z), PressureFieldRead);
+    float p2 = SamplePressure(uint3(DTid.x, DTid.y - 1, DTid.z), PressureFieldRead);
+    float p3 = SamplePressure(uint3(DTid.x, DTid.y + 1, DTid.z), PressureFieldRead);
+    float p4 = SamplePressure(uint3(DTid.x, DTid.y, DTid.z - 1), PressureFieldRead);
+    float p5 = SamplePressure(uint3(DTid.x, DTid.y, DTid.z + 1), PressureFieldRead);
+
+    float pressure = (p0 + p1 + p2 + p3 + p4 + p5 - div) / 6.0;
+    
+    PressureFieldWrite[DTid] = pressure;
+}

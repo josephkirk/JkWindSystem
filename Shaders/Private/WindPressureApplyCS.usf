@@ -1,0 +1,37 @@
+#include "/Engine/Public/Platform.ush"
+
+RWTexture3D<float4> VelocityField;
+Texture3D<float> PressureField;
+float3 GridSize;
+
+#define THREADS_PER_GROUP 8
+
+bool IsValidCell(uint3 coord)
+{
+    return all(coord < GridSize) && all(coord >= 0);
+}
+
+float SamplePressure(uint3 coord)
+{
+    if (!IsValidCell(coord))
+        return 0.0;
+    return PressureField[coord];
+}
+
+[numthreads(THREADS_PER_GROUP, THREADS_PER_GROUP, THREADS_PER_GROUP)]
+void MainCS(uint3 DTid : SV_DispatchThreadID)
+{
+    if (any(DTid >= GridSize))
+        return;
+
+    float3 h = 1.0 / GridSize;
+    float3 halfrdx = 0.5 * h;
+
+    float4 grad;
+    grad.x = halfrdx.x * (SamplePressure(uint3(DTid.x + 1, DTid.y, DTid.z)) - SamplePressure(uint3(DTid.x - 1, DTid.y, DTid.z)));
+    grad.y = halfrdx.y * (SamplePressure(uint3(DTid.x, DTid.y + 1, DTid.z)) - SamplePressure(uint3(DTid.x, DTid.y - 1, DTid.z)));
+    grad.z = halfrdx.z * (SamplePressure(uint3(DTid.x, DTid.y, DTid.z + 1)) - SamplePressure(uint3(DTid.x, DTid.y, DTid.z - 1)));
+    grad.w = 0;
+
+    VelocityField[DTid] -= grad;
+}
