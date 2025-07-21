@@ -65,8 +65,8 @@ class FCopyTextureToBufferCS : public FGlobalShader
 //     FCopyTextureToBufferCS::FParameters* Parameters;
 // };
 
-IMPLEMENT_GLOBAL_SHADER(FCopyTextureToBufferCS, "/Plugin/JK_WindSystem/Private/CopyTextureToBuffer.usf", "MainCS", SF_Compute);
-IMPLEMENT_GLOBAL_SHADER(FWindSimulationCS, "/Plugin/JK_WindSystem/Private/WindSimulationCS.usf", "MainCS", SF_Compute);
+IMPLEMENT_GLOBAL_SHADER(FCopyTextureToBufferCS, "/JK_WindSystem/CopyTextureToBuffer.usf", "MainCS", SF_Compute);
+IMPLEMENT_GLOBAL_SHADER(FWindSimulationCS, "/JK_WindSystem/WindSimulationCS.usf", "MainCS", SF_Compute);
 
 UWindGPUSimulationComponent::UWindGPUSimulationComponent()
     : VelocityRenderTarget(nullptr), DensityRenderTarget(nullptr)

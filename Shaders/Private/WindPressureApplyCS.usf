@@ -2,7 +2,7 @@
 
 RWTexture3D<float4> VelocityField;
 Texture3D<float> PressureField;
-float3 GridSize;
+uint3 GridSize;
 
 #define THREADS_PER_GROUP 8
 

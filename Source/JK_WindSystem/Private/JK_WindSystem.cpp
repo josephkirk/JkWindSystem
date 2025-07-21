@@ -7,8 +7,8 @@
 void FJK_WindSystemModule::StartupModule()
 {
 	// This code will execute after your module is loaded into memory; the exact timing is specified in the .uplugin file per-module
-	FString PluginShaderDir = FPaths::Combine(IPluginManager::Get().FindPlugin("JK_WindSystem")->GetBaseDir(), "Shaders");
-	AddShaderSourceDirectoryMapping("/Plugin/JK_WindSystem", PluginShaderDir);
+	FString PluginShaderDir = FPaths::Combine(IPluginManager::Get().FindPlugin("JK_WindSystem")->GetBaseDir(), "Shaders/Private");
+	AddShaderSourceDirectoryMapping("/JK_WindSystem", PluginShaderDir);
 }
 
 void FJK_WindSystemModule::ShutdownModule()
