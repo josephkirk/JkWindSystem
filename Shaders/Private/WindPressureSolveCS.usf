@@ -3,7 +3,7 @@
 RWTexture3D<float4> VelocityField;
 RWTexture3D<float> PressureFieldRead;
 RWTexture3D<float> PressureFieldWrite;
-float3 GridSize;
+uint3 GridSize;
 float PressureTolerance;
 
 #define THREADS_PER_GROUP 8
@@ -20,11 +20,11 @@ float4 SampleVelocity(uint3 coord)
     return VelocityField[coord];
 }
 
-float SamplePressure(uint3 coord, Texture3D<float> pressureTex)
+float SamplePressure(uint3 coord)
 {
     if (!IsValidCell(coord))
         return 0.0;
-    return pressureTex[coord];
+    return PressureFieldRead[coord];
 }
 
 float CalculateDivergence(uint3 DTid)
@@ -53,12 +53,12 @@ void MainCS(uint3 DTid : SV_DispatchThreadID)
     float div = CalculateDivergence(DTid);
     
     // For first iteration, initialize with divergence
-    float p0 = SamplePressure(uint3(DTid.x - 1, DTid.y, DTid.z), PressureFieldRead);
-    float p1 = SamplePressure(uint3(DTid.x + 1, DTid.y, DTid.z), PressureFieldRead);
-    float p2 = SamplePressure(uint3(DTid.x, DTid.y - 1, DTid.z), PressureFieldRead);
-    float p3 = SamplePressure(uint3(DTid.x, DTid.y + 1, DTid.z), PressureFieldRead);
-    float p4 = SamplePressure(uint3(DTid.x, DTid.y, DTid.z - 1), PressureFieldRead);
-    float p5 = SamplePressure(uint3(DTid.x, DTid.y, DTid.z + 1), PressureFieldRead);
+    float p0 = SamplePressure(uint3(DTid.x - 1, DTid.y, DTid.z));
+    float p1 = SamplePressure(uint3(DTid.x + 1, DTid.y, DTid.z));
+    float p2 = SamplePressure(uint3(DTid.x, DTid.y - 1, DTid.z));
+    float p3 = SamplePressure(uint3(DTid.x, DTid.y + 1, DTid.z));
+    float p4 = SamplePressure(uint3(DTid.x, DTid.y, DTid.z - 1));
+    float p5 = SamplePressure(uint3(DTid.x, DTid.y, DTid.z + 1));
 
     float pressure = (p0 + p1 + p2 + p3 + p4 + p5 - div) / 6.0;
     
