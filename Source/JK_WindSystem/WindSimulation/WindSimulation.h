@@ -75,6 +75,7 @@ protected:
 
 	// Render thread execution
 	void ExecuteSimulationOnRenderThread(FRHICommandListImmediate& RHICmdList, int32 SimulationStep, float InDeltaTime);
+	void ExecuteVelocityInjectionOnRenderThread(FRHICommandListImmediate& RHICmdList, const FIntVector& GridCoord, const FVector& Velocity, float InjectionRadius);
 
 	// Utility functions
 	FIntVector WorldLocationToGridCoord(const FVector& WorldLocation) const;

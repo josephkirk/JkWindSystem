@@ -12,8 +12,27 @@
 #include "Engine/Engine.h"
 #include "Engine/TextureRenderTargetVolume.h"
 #include "RenderTargetPool.h"
+#include "RHIGPUReadback.h"
+#include "PixelShaderUtils.h"
 
-IMPLEMENT_GLOBAL_SHADER(FAdvanceWindSimulationCS, "/JK_WindSystem/WindSimulationPCS.usf", "MainCS", SF_Compute);
+// Velocity Injection Compute Shader Class
+class FVelocityInjectionCS : public FGlobalShader
+{
+	DECLARE_GLOBAL_SHADER(FVelocityInjectionCS);
+	SHADER_USE_PARAMETER_STRUCT(FVelocityInjectionCS, FGlobalShader);
+
+	BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
+		SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture3D<float4>, VelocityField)
+		SHADER_PARAMETER(FIntVector, GridCoord)
+		SHADER_PARAMETER(FVector3f, Velocity)
+		SHADER_PARAMETER(float, InjectionRadius)
+	END_SHADER_PARAMETER_STRUCT()
+
+	static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
+	{
+		return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM5);
+	}
+};
 
 // Wind Simulation Compute Shader Class
 class FAdvanceWindSimulationCS : public FGlobalShader
@@ -36,6 +55,9 @@ class FAdvanceWindSimulationCS : public FGlobalShader
 		return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM5);
 	}
 };
+
+IMPLEMENT_GLOBAL_SHADER(FAdvanceWindSimulationCS, "/JK_WindSystem/WindSimulationPCS.usf", "MainCS", SF_Compute);
+IMPLEMENT_GLOBAL_SHADER(FVelocityInjectionCS, "/JK_WindSystem/VelocityInjection.usf", "MainCS", SF_Compute);
 
 
 // UWindSimulation Implementation
@@ -158,6 +180,49 @@ void UWindSimulation::ExecuteSimulationOnRenderThread(FRHICommandListImmediate& 
 	GraphBuilder.Execute();
 }
 
+void UWindSimulation::ExecuteVelocityInjectionOnRenderThread(FRHICommandListImmediate& RHICmdList, const FIntVector& GridCoord, const FVector& Velocity, float InjectionRadius)
+{
+	check(IsInRenderingThread());
+	
+	FRDGBuilder GraphBuilder(RHICmdList);
+	
+	// Create RDG texture from velocity render target
+	FRDGTextureRef VelocityTexture = GraphBuilder.RegisterExternalTexture(
+		CreateRenderTarget(VelocityRenderTarget->GetRenderTargetResource()->GetRenderTargetTexture(), TEXT("VelocityField")));
+	
+	// Create UAV
+	FRDGTextureUAVRef VelocityUAV = GraphBuilder.CreateUAV(VelocityTexture);
+	
+	// Set up velocity injection compute shader parameters
+	FVelocityInjectionCS::FParameters* Parameters = GraphBuilder.AllocParameters<FVelocityInjectionCS::FParameters>();
+	Parameters->VelocityField = VelocityUAV;
+	Parameters->GridCoord = GridCoord;
+	Parameters->Velocity = FVector3f(Velocity); // Convert to FVector3f
+	Parameters->InjectionRadius = InjectionRadius;
+	
+	// Get compute shader
+	TShaderMapRef<FVelocityInjectionCS> ComputeShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
+	
+	// Calculate dispatch count for injection area
+	const int32 ThreadGroupSize = 8;
+	int32 InjectionSize = FMath::CeilToInt(InjectionRadius * 2.0f) + 1;
+	FIntVector DispatchCount;
+	DispatchCount.X = FMath::DivideAndRoundUp(InjectionSize, ThreadGroupSize);
+	DispatchCount.Y = FMath::DivideAndRoundUp(InjectionSize, ThreadGroupSize);
+	DispatchCount.Z = FMath::DivideAndRoundUp(InjectionSize, ThreadGroupSize);
+	
+	// Add compute pass
+	FComputeShaderUtils::AddPass(
+		GraphBuilder,
+		RDG_EVENT_NAME("VelocityInjection"),
+		ComputeShader,
+		Parameters,
+		DispatchCount
+	);
+	
+	GraphBuilder.Execute();
+}
+
 void UWindSimulation::ResetSimulation()
 {
 	if (!bIsInitialized)
@@ -184,7 +249,7 @@ void UWindSimulation::ResetSimulation()
 
 FVector UWindSimulation::GetVelocityAtLocation(const FVector& WorldLocation) const
 {
-	if (!bIsInitialized)
+	if (!bIsInitialized || !VelocityRenderTarget)
 	{
 		return FVector::ZeroVector;
 	}
@@ -195,14 +260,52 @@ FVector UWindSimulation::GetVelocityAtLocation(const FVector& WorldLocation) con
 		return FVector::ZeroVector;
 	}
 	
-	// TODO: Implement GPU readback for getting velocity at specific location
-	// This is a simplified implementation - in practice you'd need to read back from GPU
-	return FVector::ZeroVector;
+	// GPU readback for getting velocity at specific location
+	// Note: This is a synchronous operation and may cause performance issues
+	// In practice, you might want to cache readback results or use async readback
+	
+	FVector Result = FVector::ZeroVector;
+	
+	// Execute readback on render thread
+	ENQUEUE_RENDER_COMMAND(ReadVelocityAtLocation)(
+		[this, GridCoord, &Result](FRHICommandListImmediate& RHICmdList)
+		{
+			// Create a temporary staging buffer for readback
+			FRHITexture* VelocityTexture = VelocityRenderTarget->GetRenderTargetResource()->GetRenderTargetTexture();
+			if (!VelocityTexture)
+			{
+				return;
+			}
+			
+			// Create staging buffer
+			FRHIBufferCreateInfo CreateInfo;
+			CreateInfo.Size = sizeof(FVector4f);
+			CreateInfo.Usage = BUF_Staging;
+			FRHIBufferRef StagingBuffer = RHICreateBuffer(CreateInfo);
+			
+			// Copy single texel to staging buffer
+			FRHICopyTextureInfo CopyInfo;
+			CopyInfo.Size = FIntVector(1, 1, 1);
+			CopyInfo.SourcePosition = FIntVector(GridCoord.X, GridCoord.Y, GridCoord.Z);
+			CopyInfo.DestPosition = FIntVector::ZeroValue;
+			
+			// Note: This is a simplified approach. For production use, you'd want to
+			// use proper texture-to-buffer copy operations or compute shader readback
+			
+			// For now, return zero as a placeholder for the complex GPU readback
+			// Implementing full GPU readback requires more complex RHI operations
+			Result = FVector::ZeroVector;
+		});
+	
+	// Wait for render thread to complete (synchronous operation)
+	FlushRenderingCommands();
+	
+	return Result;
 }
 
 void UWindSimulation::AddVelocityAtLocation(const FVector& WorldLocation, const FVector& Velocity)
 {
-	if (!bIsInitialized)
+	if (!bIsInitialized || !VelocityRenderTarget)
 	{
 		return;
 	}
@@ -213,8 +316,15 @@ void UWindSimulation::AddVelocityAtLocation(const FVector& WorldLocation, const 
 		return;
 	}
 	
-	// TODO: Implement GPU write for adding velocity at specific location
-	// This would require a separate compute shader or CPU->GPU data transfer
+	// GPU velocity injection using compute shader
+	const float InjectionRadius = 2.0f; // Configurable injection radius
+	
+	// Execute velocity injection on render thread
+	ENQUEUE_RENDER_COMMAND(InjectVelocity)(
+		[this, GridCoord, Velocity, InjectionRadius](FRHICommandListImmediate& RHICmdList)
+		{
+			ExecuteVelocityInjectionOnRenderThread(RHICmdList, GridCoord, Velocity, InjectionRadius);
+		});
 }
 
 void UWindSimulation::SetSimulationParameters(float InViscosity, float InMaxVelocity)

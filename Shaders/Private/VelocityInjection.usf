@@ -1,0 +1,29 @@
+#include "/Engine/Public/Platform.ush"
+
+RWTexture3D<float4> VelocityField;
+uint3 GridCoord;
+float3 Velocity;
+float InjectionRadius;
+
+#define THREADS_PER_GROUP 8
+
+[numthreads(THREADS_PER_GROUP, THREADS_PER_GROUP, THREADS_PER_GROUP)]
+void MainCS(uint3 DTid : SV_DispatchThreadID)
+{
+    // Calculate distance from injection point
+    float3 distance = float3(DTid) - float3(GridCoord);
+    float distanceLength = length(distance);
+    
+    // Apply velocity injection with falloff based on distance
+    if (distanceLength <= InjectionRadius)
+    {
+        float falloff = 1.0 - (distanceLength / InjectionRadius);
+        falloff = falloff * falloff; // Quadratic falloff
+        
+        float4 currentVelocity = VelocityField[DTid];
+        float4 injectedVelocity = float4(Velocity * falloff, 0.0);
+        
+        // Add injected velocity to existing velocity
+        VelocityField[DTid] = currentVelocity + injectedVelocity;
+    }
+}
