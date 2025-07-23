@@ -1,4 +1,4 @@
-#include "WindPressureSolver.h"
+#include "WindSimulation/WindPressureSolver.h"
 #include "RenderGraphUtils.h" // For FClearUnorderedAccessViewUint
 
 // This is what links the C++ class to the shader file.
