@@ -40,6 +40,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wind Simulation")
 	TObjectPtr<UTextureRenderTargetVolume> DensityRenderTarget;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wind Simulation")
+	TObjectPtr<UTextureRenderTargetVolume> PressureRenderTarget;
+
+	// Pressure solver parameters
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wind Simulation", meta = (ClampMin = "1", ClampMax = "50"))
+	int32 PressureSolverIterations = 20;
+
 	// Public interface functions
 	UFUNCTION(BlueprintCallable, Category = "Wind Simulation")
 	void Initialize(int32 InGridSizeX = 64, int32 InGridSizeY = 64, int32 InGridSizeZ = 64);
@@ -76,6 +83,10 @@ protected:
 	// Render thread execution
 	void ExecuteSimulationOnRenderThread(FRHICommandListImmediate& RHICmdList, int32 SimulationStep, float InDeltaTime);
 	void ExecuteVelocityInjectionOnRenderThread(FRHICommandListImmediate& RHICmdList, const FIntVector& GridCoord, const FVector& Velocity, float InjectionRadius);
+	
+	// Pressure solver methods
+	void ExecutePressureSolveOnRenderThread(FRHICommandListImmediate& RHICmdList);
+	void ExecutePressureApplyOnRenderThread(FRHICommandListImmediate& RHICmdList);
 
 	// Utility functions
 	FIntVector WorldLocationToGridCoord(const FVector& WorldLocation) const;

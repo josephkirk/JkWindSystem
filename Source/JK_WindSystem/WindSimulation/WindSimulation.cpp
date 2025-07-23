@@ -1,4 +1,5 @@
 #include "WindSimulation/WindSimulation.h"
+#include "WindSimulation/WindPressureSolver.h"
 #include "RenderGraphBuilder.h"
 #include "RenderGraphUtils.h"
 #include "ShaderParameterStruct.h"
@@ -99,6 +100,12 @@ void UWindSimulation::CreateRenderTargets()
 	DensityRenderTarget->Init(GridSize.X, GridSize.Y, GridSize.Z, EPixelFormat::PF_R32_FLOAT);
 	DensityRenderTarget->ClearColor = FLinearColor::Black;
 	DensityRenderTarget->UpdateResource();
+	
+	// Create pressure render target (float for pressure field)
+	PressureRenderTarget = NewObject<UTextureRenderTargetVolume>(this);
+	PressureRenderTarget->Init(GridSize.X, GridSize.Y, GridSize.Z, EPixelFormat::PF_R32_FLOAT);
+	PressureRenderTarget->ClearColor = FLinearColor::Black;
+	PressureRenderTarget->UpdateResource();
 }
 
 void UWindSimulation::StepSimulation(float InDeltaTime)
@@ -365,5 +372,101 @@ bool UWindSimulation::IsValidGridCoord(const FIntVector& GridCoord) const
 	return GridCoord.X >= 0 && GridCoord.X < GridSize.X &&
 		   GridCoord.Y >= 0 && GridCoord.Y < GridSize.Y &&
 		   GridCoord.Z >= 0 && GridCoord.Z < GridSize.Z;
+}
+
+void UWindSimulation::ExecutePressureSolveOnRenderThread(FRHICommandListImmediate& RHICmdList)
+{
+	check(IsInRenderingThread());
+	
+	FRDGBuilder GraphBuilder(RHICmdList);
+	
+	// Create RDG textures from render targets
+	FRDGTextureRef VelocityTexture = GraphBuilder.RegisterExternalTexture(
+		CreateRenderTarget(VelocityRenderTarget->GetRenderTargetResource()->GetRenderTargetTexture(), TEXT("VelocityField")));
+	
+	FRDGTextureRef PressureTexture = GraphBuilder.RegisterExternalTexture(
+		CreateRenderTarget(PressureRenderTarget->GetRenderTargetResource()->GetRenderTargetTexture(), TEXT("PressureField")));
+	
+	// Create UAVs and SRVs
+	FRDGTextureUAVRef VelocityUAV = GraphBuilder.CreateUAV(VelocityTexture);
+	FRDGTextureUAVRef PressureUAV = GraphBuilder.CreateUAV(PressureTexture);
+	FRDGTextureSRVRef PressureSRV = GraphBuilder.CreateSRV(PressureTexture);
+	
+	// Get pressure solve compute shader
+	TShaderMapRef<FWindPressureSolveCS> PressureSolveShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
+	
+	// Calculate dispatch count
+	const int32 ThreadGroupSize = 8;
+	FIntVector DispatchCount;
+	DispatchCount.X = FMath::DivideAndRoundUp(GridSize.X, ThreadGroupSize);
+	DispatchCount.Y = FMath::DivideAndRoundUp(GridSize.Y, ThreadGroupSize);
+	DispatchCount.Z = FMath::DivideAndRoundUp(GridSize.Z, ThreadGroupSize);
+	
+	// Perform iterative pressure solve
+	for (int32 Iteration = 0; Iteration < PressureSolverIterations; ++Iteration)
+	{
+		// Set up pressure solve parameters
+		FWindPressureSolveCS::FParameters* PressureParams = GraphBuilder.AllocParameters<FWindPressureSolveCS::FParameters>();
+		PressureParams->VelocityField = VelocityUAV;
+		PressureParams->PressureFieldRead = PressureSRV;
+		PressureParams->PressureFieldWrite = PressureUAV;
+		PressureParams->GridSize = GridSize;
+		
+		// Add pressure solve pass
+		FComputeShaderUtils::AddPass(
+			GraphBuilder,
+			RDG_EVENT_NAME("WindPressureSolve_Iteration_%d", Iteration),
+			PressureSolveShader,
+			PressureParams,
+			DispatchCount
+		);
+	}
+	
+	GraphBuilder.Execute();
+}
+
+void UWindSimulation::ExecutePressureApplyOnRenderThread(FRHICommandListImmediate& RHICmdList)
+{
+	check(IsInRenderingThread());
+	
+	FRDGBuilder GraphBuilder(RHICmdList);
+	
+	// Create RDG textures from render targets
+	FRDGTextureRef VelocityTexture = GraphBuilder.RegisterExternalTexture(
+		CreateRenderTarget(VelocityRenderTarget->GetRenderTargetResource()->GetRenderTargetTexture(), TEXT("VelocityField")));
+	
+	FRDGTextureRef PressureTexture = GraphBuilder.RegisterExternalTexture(
+		CreateRenderTarget(PressureRenderTarget->GetRenderTargetResource()->GetRenderTargetTexture(), TEXT("PressureField")));
+	
+	// Create UAV and SRV
+	FRDGTextureUAVRef VelocityUAV = GraphBuilder.CreateUAV(VelocityTexture);
+	FRDGTextureSRVRef PressureSRV = GraphBuilder.CreateSRV(PressureTexture);
+	
+	// Set up pressure apply parameters
+	FWindPressureApplyCS::FParameters* ApplyParams = GraphBuilder.AllocParameters<FWindPressureApplyCS::FParameters>();
+	ApplyParams->VelocityField = VelocityUAV;
+	ApplyParams->PressureField = PressureSRV;
+	ApplyParams->GridSize = GridSize;
+	
+	// Get pressure apply compute shader
+	TShaderMapRef<FWindPressureApplyCS> PressureApplyShader(GetGlobalShaderMap(GMaxRHIFeatureLevel));
+	
+	// Calculate dispatch count
+	const int32 ThreadGroupSize = 8;
+	FIntVector DispatchCount;
+	DispatchCount.X = FMath::DivideAndRoundUp(GridSize.X, ThreadGroupSize);
+	DispatchCount.Y = FMath::DivideAndRoundUp(GridSize.Y, ThreadGroupSize);
+	DispatchCount.Z = FMath::DivideAndRoundUp(GridSize.Z, ThreadGroupSize);
+	
+	// Add pressure apply pass
+	FComputeShaderUtils::AddPass(
+		GraphBuilder,
+		RDG_EVENT_NAME("WindPressureApply"),
+		PressureApplyShader,
+		ApplyParams,
+		DispatchCount
+	);
+	
+	GraphBuilder.Execute();
 }
 
