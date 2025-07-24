@@ -1,5 +1,5 @@
-#include "WindSimulation/WindSimulation.h"
-#include "WindSimulation/WindPressureSolver.h"
+#include "WindSimulation.h"
+#include "WindSimulationCS.h"
 #include "RenderGraphBuilder.h"
 #include "RenderGraphUtils.h"
 #include "ShaderParameterStruct.h"
@@ -15,51 +15,6 @@
 #include "RenderTargetPool.h"
 #include "RHIGPUReadback.h"
 #include "PixelShaderUtils.h"
-
-// Velocity Injection Compute Shader Class
-class FVelocityInjectionCS : public FGlobalShader
-{
-	DECLARE_GLOBAL_SHADER(FVelocityInjectionCS);
-	SHADER_USE_PARAMETER_STRUCT(FVelocityInjectionCS, FGlobalShader);
-
-	BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
-		SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture3D<float4>, VelocityField)
-		SHADER_PARAMETER(FIntVector, GridCoord)
-		SHADER_PARAMETER(FVector3f, Velocity)
-		SHADER_PARAMETER(float, InjectionRadius)
-	END_SHADER_PARAMETER_STRUCT()
-
-	static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
-	{
-		return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM5);
-	}
-};
-
-// Wind Simulation Compute Shader Class
-class FAdvanceWindSimulationCS : public FGlobalShader
-{
-	DECLARE_GLOBAL_SHADER(FAdvanceWindSimulationCS);
-	SHADER_USE_PARAMETER_STRUCT(FAdvanceWindSimulationCS, FGlobalShader);
-
-	BEGIN_SHADER_PARAMETER_STRUCT(FParameters, )
-		SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture3D<float4>, VelocityField)
-		SHADER_PARAMETER_RDG_TEXTURE_UAV(RWTexture3D<float>, DensityField)
-		SHADER_PARAMETER(float, DeltaTime)
-		SHADER_PARAMETER(float, Viscosity)
-		SHADER_PARAMETER(FIntVector, GridSize)
-		SHADER_PARAMETER(int32, SimulationStep)
-		SHADER_PARAMETER(float, MaxVelocity)
-	END_SHADER_PARAMETER_STRUCT()
-
-	static bool ShouldCompilePermutation(const FGlobalShaderPermutationParameters& Parameters)
-	{
-		return IsFeatureLevelSupported(Parameters.Platform, ERHIFeatureLevel::SM5);
-	}
-};
-
-IMPLEMENT_GLOBAL_SHADER(FAdvanceWindSimulationCS, "/JK_WindSystem/WindSimulationPCS.usf", "MainCS", SF_Compute);
-IMPLEMENT_GLOBAL_SHADER(FVelocityInjectionCS, "/JK_WindSystem/VelocityInjection.usf", "MainCS", SF_Compute);
-
 
 // UWindSimulation Implementation
 UWindSimulation::UWindSimulation()
@@ -273,39 +228,39 @@ FVector UWindSimulation::GetVelocityAtLocation(const FVector& WorldLocation) con
 	
 	FVector Result = FVector::ZeroVector;
 	
-	// Execute readback on render thread
-	ENQUEUE_RENDER_COMMAND(ReadVelocityAtLocation)(
-		[this, GridCoord, &Result](FRHICommandListImmediate& RHICmdList)
-		{
-			// Create a temporary staging buffer for readback
-			FRHITexture* VelocityTexture = VelocityRenderTarget->GetRenderTargetResource()->GetRenderTargetTexture();
-			if (!VelocityTexture)
-			{
-				return;
-			}
+	// // Execute readback on render thread
+	// ENQUEUE_RENDER_COMMAND(ReadVelocityAtLocation)(
+	// 	[this, GridCoord, &Result](FRHICommandListImmediate& RHICmdList)
+	// 	{
+	// 		// Create a temporary staging buffer for readback
+	// 		FRHITexture* VelocityTexture = VelocityRenderTarget->GetRenderTargetResource()->GetRenderTargetTexture();
+	// 		if (!VelocityTexture)
+	// 		{
+	// 			return;
+	// 		}
 			
-			// Create staging buffer
-			FRHIBufferCreateInfo CreateInfo;
-			CreateInfo.Size = sizeof(FVector4f);
-			CreateInfo.Usage = BUF_Staging;
-			FRHIBufferRef StagingBuffer = RHICreateBuffer(CreateInfo);
+	// 		// Create staging buffer
+	// 		FRHIBufferCreateInfo CreateInfo;
+	// 		CreateInfo.Size = sizeof(FVector4f);
+	// 		CreateInfo.Usage = BUF_Staging;
+	// 		FRHIBufferRef StagingBuffer = RHICreateBuffer(CreateInfo);
 			
-			// Copy single texel to staging buffer
-			FRHICopyTextureInfo CopyInfo;
-			CopyInfo.Size = FIntVector(1, 1, 1);
-			CopyInfo.SourcePosition = FIntVector(GridCoord.X, GridCoord.Y, GridCoord.Z);
-			CopyInfo.DestPosition = FIntVector::ZeroValue;
+	// 		// Copy single texel to staging buffer
+	// 		FRHICopyTextureInfo CopyInfo;
+	// 		CopyInfo.Size = FIntVector(1, 1, 1);
+	// 		CopyInfo.SourcePosition = FIntVector(GridCoord.X, GridCoord.Y, GridCoord.Z);
+	// 		CopyInfo.DestPosition = FIntVector::ZeroValue;
 			
-			// Note: This is a simplified approach. For production use, you'd want to
-			// use proper texture-to-buffer copy operations or compute shader readback
+	// 		// Note: This is a simplified approach. For production use, you'd want to
+	// 		// use proper texture-to-buffer copy operations or compute shader readback
 			
-			// For now, return zero as a placeholder for the complex GPU readback
-			// Implementing full GPU readback requires more complex RHI operations
-			Result = FVector::ZeroVector;
-		});
+	// 		// For now, return zero as a placeholder for the complex GPU readback
+	// 		// Implementing full GPU readback requires more complex RHI operations
+	// 		Result = FVector::ZeroVector;
+	// 	});
 	
-	// Wait for render thread to complete (synchronous operation)
-	FlushRenderingCommands();
+	// // Wait for render thread to complete (synchronous operation)
+	// FlushRenderingCommands();
 	
 	return Result;
 }

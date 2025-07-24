@@ -19,7 +19,8 @@ public class JK_WindSystem : ModuleRules
 			new string[] {
 				"JK_WindSystem/WindGenerators",
 				"JK_WindSystem/Visualizers",
-				"JK_WindSystem/WindZones"
+				"JK_WindSystem/WindZones",
+                "JK_WindSystem/WindSimulation"
 				// ... add other private include paths required here ...
 			}
 		);
